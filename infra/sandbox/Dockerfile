@@ -36,8 +36,20 @@ VOLUME ["/workspace"]
 ENTRYPOINT ["/sbin/tini", "--", "node", "--import", "/opt/aegis/tools/register-ts.mjs", "/opt/aegis/packages/cli/src/bin.ts"]
 CMD ["--help"]
 
+# The image ships both roles and the healthcheck cannot know which one it was
+# started as, so it probes the thing both share: the binary answers `--version`
+# without touching the network, the filesystem, or a target. A server-mode
+# container that dies is caught here too, because the CLI entry point is what
+# starts the dashboard.
+#
+# Interval is deliberately longer than the default 30s: this is a scanner, not a
+# request path, and a healthcheck that restarts a container mid-scan destroys
+# more information than it protects.
+HEALTHCHECK --interval=60s --timeout=10s --start-period=15s --retries=3 \
+  CMD ["node", "--import", "/opt/aegis/tools/register-ts.mjs", "/opt/aegis/packages/cli/src/bin.ts", "--version"]
+
 LABEL org.opencontainers.image.title="Aegis" \
       org.opencontainers.image.description="The security platform for AI agents" \
       org.opencontainers.image.licenses="MIT" \
-      org.opencontainers.image.source="https://github.com/aegis-security/aegis" \
+      org.opencontainers.image.source="https://github.com/TalhaJadoon123/aegis" \
       org.opencontainers.image.version="0.1.0"

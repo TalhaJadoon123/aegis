@@ -224,6 +224,21 @@ export function scanSecrets(
     return matches;
   }
 
+  // Template and example files document configuration; they are *supposed* to
+  // contain a credential-shaped value, and every real project has one.
+  // Flagging `.env.example` guarantees a false positive in the first scan a
+  // customer runs, which is the fastest way to teach them to ignore the output.
+  //
+  // Every other rule still applies to these files; only credential detection is
+  // skipped, because a placeholder in a template is not a leak.
+  if (
+    /(?:\.example|\.sample|\.template|\.dist|\.defaults)\.\w+$/i.test(path) ||
+    /(?:^|\/)example\.(?:env|ya?ml|json|toml|ini|conf)$/i.test(path) ||
+    /^\.env\.(?:example|sample|template|dist|defaults)$/i.test(path)
+  ) {
+    return matches;
+  }
+
   const safeContext = SAFE_CONTEXTS.some((re) => re.test(content));
 
   // Pass 1: vendor-specific patterns.

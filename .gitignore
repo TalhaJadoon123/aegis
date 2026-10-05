@@ -19,6 +19,11 @@ aegis-report.*
 *.sarif
 *.log
 
+# publish staging. `npm pack` reads package.json from the directory it runs in,
+# so the publish manifest has to be materialised under that name somewhere; the
+# build script stages into build/ and this is the legacy location.
+package.json.publish
+
 # editors / os
 .DS_Store
 Thumbs.db

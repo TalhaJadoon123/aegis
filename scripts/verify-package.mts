@@ -12,6 +12,11 @@ import { dirname, join, resolve } from 'node:path';
 import { fileURLToPath, pathToFileURL } from 'node:url';
 import { tmpdir } from 'node:os';
 
+// Credentials are assembled at runtime; see
+// packages/core/test/synthetic-secrets.ts. Hardcoding them here would make
+// Aegis's own repository show credential findings on every self-scan.
+import { FAKE } from '../packages/core/test/synthetic-secrets.js';
+
 const here = dirname(fileURLToPath(import.meta.url));
 const ROOT = resolve(here, '..');
 const DIST = join(ROOT, 'dist');
@@ -101,7 +106,10 @@ try {
       join(fixture, 'agent.py'),
       [
         'import subprocess',
-        'OPENAI_API_KEY = "sk-proj-abcdefghijklmnopqrstuvwxyz0123456789"',
+        // Template literal, not a quoted string: the literal text "FAKE.openai"
+        // would be written into the fixture verbatim and the scanner would
+        // correctly report no key at all.
+        `OPENAI_API_KEY = "${FAKE.openai}"`,
         'def run(user_input):',
         '    subprocess.run(f"grep {user_input} /var/log", shell=True)',
         'while True:',
@@ -115,8 +123,11 @@ try {
       s.code === 1 && /CRITICAL|Score/.test(s.out),
       s.out.slice(0, 120).replace(/\n/g, ' '));
     check('scan does not echo the raw key',
-      !s.out.includes('sk-proj-abcdefghijklmnopqrstuvwxyz0123456789'));
-    check('scan redacts the key', s.out.includes('sk-proj-abcd') || s.out.includes('****'));
+      !s.out.includes(FAKE.openai),
+      'the full credential must never reach the output');
+    check('scan redacts the key',
+      s.out.includes(FAKE.openai.slice(0, 8)) && s.out.includes('****'),
+      'the visible prefix is kept and the rest is masked');
 
     const sarif = run(NPX, ['aegis', 'scan', fixture, '--format', 'sarif', '--no-connect', '--no-spawn'], { cwd: sandbox });
     let sarifOk = false;

@@ -59,10 +59,16 @@ jobs:
         with:
           node-version: 22
 
+      # `npm run package` compiles, stages, verifies and packs. Do not replace
+      # this with a bare `npm pack`: `aegis.package.json` points `bin` at
+      # `build/publish/**`, which only exists after tsc runs, and Node cannot
+      # strip types under node_modules. A bare pack ships a tarball whose
+      # entry point does not exist.
       - name: Build the publishable tarball
-        run: |
-          cp aegis.package.json package.json.publish
-          npm pack --pack-destination dist/
+        run: npm run package
+
+      - name: Verify the tarball installs and runs as a consumer
+        run: npm run package:verify
 
       # A supply-chain-relevant assertion for a tool that ships itself: the
       # published package must have no installable dependencies at all.

@@ -6,6 +6,9 @@ import { spawn } from 'node:child_process';
 import { pathToFileURL } from 'node:url';
 import { dirname, join, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
+import { FAKE, vulnerableAgentPython } from '../packages/core/test/synthetic-secrets.js';
+import { mkdtempSync, writeFileSync } from 'node:fs';
+import { tmpdir } from 'node:os';
 
 const here = dirname(fileURLToPath(import.meta.url));
 const ROOT = resolve(here, '..');
@@ -62,12 +65,33 @@ for (const format of ['json', 'sarif', 'markdown', 'html', 'csv', 'jsonl', 'text
 }
 
 // --- secret redaction across every format ---------------------------------
+// Materialised here rather than using the committed fixture: that fixture reads
+// its key from the environment, so it holds no secret and this check would pass
+// without exercising the redactor at all.
+const secretDir = mkdtempSync(join(tmpdir(), 'aegis-smoke-'));
+writeFileSync(join(secretDir, 'agent.py'), vulnerableAgentPython(), 'utf8');
+
+check('redaction fixture contains a credential',
+  vulnerableAgentPython().includes(FAKE.openai),
+  'nothing to redact -- the redaction check would be vacuous');
+
 let leaked = '';
+let unmasked = '';
 for (const format of ['json', 'sarif', 'markdown', 'html', 'csv', 'jsonl', 'text']) {
-  const r = await run(['scan', FIXTURE, '--format', format, '--no-connect', '--no-color']);
-  if (r.out.includes('sk-proj-abcdefghijklmnopqrstuvwxyz')) leaked = leaked || format;
+  const r = await run(['scan', secretDir, '--format', format, '--no-connect', '--no-color']);
+  if (r.out.includes(FAKE.openai)) leaked = leaked || format;
+  // Redaction must mask, not delete: a scanner that silently dropped the value
+  // would satisfy "no raw secret" while hiding the finding's evidence.
+  //
+  // CSV is exempt because it carries no evidence column at all -- the finding is
+  // still reported (rule, severity, file, line, fingerprint), so there is
+  // nothing there to mask.
+  if (format !== 'csv' && !r.out.includes(FAKE.openai.slice(0, 8)) && !r.out.includes('****')) {
+    unmasked = unmasked || format;
+  }
 }
 check('secrets redacted in all formats', !leaked, leaked ? `leaked in ${leaked}` : '');
+check('secrets masked rather than deleted', !unmasked, unmasked ? `no mask in ${unmasked}` : '');
 
 // --- other commands -------------------------------------------------------
 const dry = await run(['redteam', '--dry-run', '--population', '6', '--generations', '2', '--budget', '16', '--no-color']);

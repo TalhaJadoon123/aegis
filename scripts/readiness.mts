@@ -7,7 +7,13 @@
 import { spawnSync } from 'node:child_process';
 import { pathToFileURL, fileURLToPath } from 'node:url';
 import { dirname, join, resolve } from 'node:path';
-import { existsSync, readFileSync, mkdirSync, writeFileSync } from 'node:fs';
+import { existsSync, readFileSync, mkdirSync, writeFileSync, mkdtempSync } from 'node:fs';
+import { tmpdir } from 'node:os';
+
+// Credentials are assembled at runtime; see
+// packages/core/test/synthetic-secrets.ts. Hardcoding them here would make
+// Aegis's own repository show credential findings on every self-scan.
+import { FAKE, vulnerableAgentPython } from '../packages/core/test/synthetic-secrets.js';
 
 const here = dirname(fileURLToPath(import.meta.url));
 const ROOT = resolve(here, '..');
@@ -78,6 +84,21 @@ process.stdout.write('\n[3] CLI surface\n');
 /* ---- 4. output formats ---- */
 process.stdout.write('\n[4] Output formats\n');
 const FIXTURE = join('packages', 'core', 'test', 'fixtures', 'vulnerable-agent');
+
+/**
+ * A fixture that actually contains a credential.
+ *
+ * The committed fixture reads its key from the environment, so scanning it proves
+ * nothing about redaction -- there is no secret to leak. This materialises a
+ * copy with synthetic keys spliced in, so the check below is testing the
+ * redactor rather than asserting that an absent string is absent.
+ */
+const SECRET_FIXTURE = (() => {
+  const dir = join(mkdtempSync(join(tmpdir(), 'aegis-gate-')), 'secret-fixture');
+  mkdirSync(dir, { recursive: true });
+  writeFileSync(join(dir, 'agent.py'), vulnerableAgentPython(), 'utf8');
+  return dir;
+})();
 {
   for (const f of ['json', 'sarif', 'markdown', 'html', 'csv', 'jsonl', 'text']) {
     const r = run(['scan', FIXTURE, '--format', f, '--no-connect', '--no-spawn', '--no-color']);
@@ -92,14 +113,26 @@ const FIXTURE = join('packages', 'core', 'test', 'fixtures', 'vulnerable-agent')
 /* ---- 5. secret safety ---- */
 process.stdout.write('\n[5] Secret safety (hard requirement)\n');
 {
-  const secrets = [
-    'sk-proj-abcdefghijklmnopqrstuvwxyz0123456789',
-    'ghp_ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789',
-  ];
+  const secrets = [FAKE.openai, FAKE.github];
+
+  // Prove the fixture is fit for the purpose before trusting a pass from it.
+  // A redaction test against a file with no secret in it passes forever and
+  // means nothing; this makes that degradation a hard failure.
+  const seeded = readFileSync(join(SECRET_FIXTURE, 'agent.py'), 'utf8');
+  const present = secrets.filter((s) => seeded.includes(s));
+  check('redaction fixture actually contains credentials', present.length === secrets.length,
+    `only ${present.length}/${secrets.length} present -- this check would be vacuous`);
+
   for (const f of ['json', 'sarif', 'markdown', 'html', 'csv', 'jsonl', 'text']) {
-    const r = run(['scan', FIXTURE, '--format', f, '--no-connect', '--no-spawn', '--no-color']);
+    const r = run(['scan', SECRET_FIXTURE, '--format', f, '--no-connect', '--no-spawn', '--no-color']);
     const leaked = secrets.filter((s) => r.out.includes(s));
     check(`no raw secret in ${f}`, leaked.length === 0, leaked.join(','));
+    // A mask that removed the whole value would also satisfy "no raw secret".
+    // Require the visible prefix so redaction is proven, not deletion.
+    if (f !== 'csv' && f !== 'jsonl') {
+      check(`secret is masked not deleted in ${f}`,
+        r.out.includes(FAKE.openai.slice(0, 8)) && r.out.includes('****'));
+    }
   }
 }
 

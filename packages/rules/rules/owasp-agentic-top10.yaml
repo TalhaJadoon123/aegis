@@ -1,0 +1,1349 @@
+id: owasp-agentic-top10
+version: 1.0.0
+name: OWASP Agentic Top 10
+description: >-
+  Rules covering the OWASP Agentic Security Initiative Top 10 risks for AI
+  agents: goal hijacking, tool misuse, identity abuse, supply chain, unexpected
+  code execution, memory poisoning, insecure inter-agent communication,
+  cascading failures, human-agent trust exploitation and rogue agents.
+  Cross-referenced to the ASI01–ASI10 identifiers.
+
+rules:
+  # ---------------------------------------------------------------------------
+  # ASI01 — Agent Goal Hijacking
+  # ---------------------------------------------------------------------------
+  - id: AEGIS-ASI01-001
+    title: Untrusted input concatenated into a prompt
+    description: >-
+      User-controlled or externally-sourced text is interpolated directly into a
+      prompt string. An attacker who controls any fragment of the prompt can steer
+      the agent away from its intended goal, which is the OWASP Agentic ASI01
+      goal-hijacking pattern.
+    severity: high
+    confidence: high
+    languages: ['typescript', 'javascript', 'python', 'go', 'tsx']
+    scanners: ['agent', 'repo']
+    taxonomy: ASI01
+    cwe: CWE-1427
+    tags: [prompt-injection, owasp-agentic, agentic]
+    patterns:
+      - type: regex
+        pattern: '(?i)(system_prompt|systemPrompt|system_message|SYSTEM)\s*(\+?=|:)\s*f?["''`][^"''`]*\{'
+      - type: regex
+        pattern: '(?i)(prompt|instructions?)\s*=\s*f["''][^"'']*\{(user_input|user_query|request|query|input|message|body|content|args)\}'
+      - type: regex
+        pattern: '(?i)(messages|conversation)\s*=\s*[^=\n]*\+\s*(user_input|user_query|request\.|body\.|params\[)'
+      - type: regex
+        pattern: '(?i)(f["''][^"'']*(?:You are|Your instructions)[^"'']*\{(?:user_input|user_query|input|request|query|body|content))'
+    remediation:
+      title: Separate instructions from untrusted data
+      description: >-
+        Put immutable instructions in a fixed system message and pass untrusted
+        content as a clearly delimited data block. Never interpolate raw user or
+        tool output into the instruction layer, and re-assert the goal after
+        untrusted content.
+      automated: false
+      effort: medium
+      patch: |
+        # before
+        system_prompt = f"You are a support agent. Answer: {user_query}"
+
+        # after
+        system_prompt = (
+            "You are a support agent. Follow only these instructions.\n"
+            "<untrusted_input>\n" + user_query + "\n</untrusted_input>"
+        )
+    compliance:
+      - framework: owasp-agentic
+        control: ASI01
+        title: Agent Goal Hijacking
+        relevant: true
+      - framework: owasp-llm
+        control: LLM01
+        title: Prompt Injection
+        relevant: true
+      - framework: eu-ai-act
+        control: 'Art. 15'
+        title: Accuracy, robustness and cybersecurity
+        relevant: true
+      - framework: nist-ai-rmf
+        control: 'MEASURE 2.7'
+        title: Security and resilience are evaluated
+        relevant: true
+      - framework: mitre-atlas
+        control: AML.T0051
+        title: LLM Prompt Injection
+        relevant: true
+
+  - id: AEGIS-ASI01-002
+    title: System prompt read from an untrusted or remote source at runtime
+    description: >-
+      The agent's instructions are fetched or read at runtime from a location the
+      user does not control. Anyone able to write to that location can rewrite the
+      agent's goals, which is a direct goal-hijacking primitive.
+    severity: critical
+    confidence: high
+    scanners: ['agent', 'repo']
+    taxonomy: ASI01
+    tags: [goal-hijacking, prompt-integrity]
+    patterns:
+      - type: regex
+        pattern: '(?i)(system_prompt|systemPrompt|instructions?|prompt)\s*=\s*(requests\.get|fetch|axios\.(get|post)|urllib\.request|http\.Get|readFileSync|open)\s*\('
+      - type: regex
+        pattern: '(?i)(system_prompt|systemPrompt)\s*=\s*os\.environ\.get\s*\(\s*["''][A-Z_]*(PROMPT|INSTRUCTION)'
+    remediation:
+      title: Pin system instructions in code or signed config
+      description: >-
+        Treat the system prompt as a build artifact. If it must be configurable,
+        pin it to a versioned, integrity-checked source and fail closed when the
+        checksum does not match.
+      automated: false
+      effort: medium
+    compliance:
+      - framework: owasp-agentic
+        control: ASI01
+        relevant: true
+      - framework: eu-ai-act
+        control: 'Art. 15'
+        relevant: true
+
+  - id: AEGIS-ASI01-003
+    title: Retrieved content inserted into the prompt without provenance
+    description: >-
+      RAG or tool output is concatenated into the prompt with no citation,
+      boundary marker, or source tag. When retrieval is backed by attacker
+      controlled text (a wiki, an issue, a web page) this is indirect prompt
+      injection.
+    severity: high
+    confidence: medium
+    languages: ['typescript', 'javascript', 'python', 'go']
+    scanners: ['agent', 'repo']
+    taxonomy: ASI01
+    tags: [rag, indirect-injection]
+    patterns:
+      - type: regex
+        pattern: '(?i)(context|documents?|chunks?|retrieved|passages?)\s*\.?\s*(join|concat|append|extend)\s*\('
+      - type: regex
+        pattern: '(?i)(results?|docs?|chunks?|passages?|snippets?)\s*:\s*(string|str)\s*=\s*["''].*\.join\('
+      - type: regex
+        pattern: '(?i)prompt\s*=\s*f?["''][^"'']*(?:Context|Documents|Retrieved|Sources)[^"'']*\{'
+    remediation:
+      title: Isolate retrieved content behind explicit boundaries
+      description: >-
+        Wrap each retrieved chunk in a delimited block with its provenance, and
+        instruct the model that content inside those blocks is data to be
+        analysed — never instructions to follow.
+      automated: false
+      effort: medium
+    compliance:
+      - framework: owasp-agentic
+        control: ASI01
+        relevant: true
+      - framework: owasp-llm
+        control: LLM01
+        relevant: true
+
+  - id: AEGIS-ASI01-004
+    title: Agent objective defined in a mutable module-level constant
+    description: >-
+      The agent goal lives in a module-level variable that other code can
+      reassign at runtime. Treat the goal as immutable and pass it explicitly
+      through the invocation boundary.
+    severity: medium
+    confidence: low
+    languages: ['python', 'typescript', 'javascript']
+    scanners: ['agent']
+    taxonomy: ASI01
+    patterns:
+      - type: assignment
+        variable: 'SYSTEM_PROMPT|system_prompt|GOAL|goal|OBJECTIVE|objective'
+        valueMatches: '.'
+    remediation:
+      title: Make the objective immutable
+      description: Freeze the constant, or pass the objective as a required argument to the entry point.
+      automated: false
+      effort: trivial
+    compliance:
+      - framework: owasp-agentic
+        control: ASI01
+        relevant: true
+
+  # ---------------------------------------------------------------------------
+  # ASI02 — Tool Misuse & Exploitation
+  # ---------------------------------------------------------------------------
+  - id: AEGIS-ASI02-001
+    title: Shell command executed with shell=True
+    description: >-
+      `subprocess.run(..., shell=True)` passes the command string to a shell,
+      so any shell metacharacter in an argument becomes code execution. This is
+      the canonical agent tool-misuse primitive when the command is built from
+      model output or user input.
+    severity: critical
+    confidence: confirmed
+    languages: ['python']
+    scanners: ['agent', 'repo']
+    taxonomy: ASI02
+    cwe: CWE-78
+    tags: [command-injection, rce, tool-misuse]
+    patterns:
+      - type: regex
+        pattern: '(?i)subprocess\.(run|call|check_call|check_output|Popen)\s*\([^)]*shell\s*=\s*True'
+      - type: regex
+        pattern: '(?i)os\.system\s*\('
+      - type: regex
+        pattern: '(?i)os\.popen\s*\('
+      - type: regex
+        pattern: '(?i)commands\.getoutput\s*\('
+    remediation:
+      title: Pass an argument list and disable the shell
+      description: >-
+        Call the binary directly with a list of arguments. If a shell is truly
+        required, validate every interpolated value against a strict allowlist
+        and quote it for the target shell.
+      automated: false
+      effort: low
+      patch: |
+        # before
+        subprocess.run(f"grep {pattern} {path}", shell=True)
+
+        # after
+        subprocess.run(["grep", "--", pattern, path], shell=False, check=True)
+    compliance:
+      - framework: owasp-agentic
+        control: ASI02
+        title: Tool Misuse and Exploitation
+        relevant: true
+      - framework: soc2
+        control: 'CC6.6'
+        title: Logical access controls protect against threats from outside the system boundary
+        relevant: true
+      - framework: iso27001
+        control: 'A.8.28'
+        title: Secure coding
+        relevant: true
+      - framework: eu-ai-act
+        control: 'Art. 15'
+        relevant: true
+      - framework: mitre-atlas
+        control: AML.T0050
+        title: Exploitation for AI System Compromise
+        relevant: true
+
+  - id: AEGIS-ASI02-002
+    title: Dynamic code evaluation with agent-controlled input
+    description: >-
+      `eval`, `exec`, `Function`, `pickle.loads` and friends execute arbitrary
+      code. When the argument can be influenced by model output, retrieved
+      documents, or tool results, this is remote code execution by design.
+    severity: critical
+    confidence: high
+    languages: ['python', 'typescript', 'javascript', 'tsx']
+    scanners: ['agent', 'repo']
+    taxonomy: ASI02
+    cwe: CWE-95
+    tags: [rce, code-injection, tool-misuse]
+    patterns:
+      - type: call
+        callee: 'eval'
+      - type: call
+        callee: 'exec'
+      - type: call
+        callee: 'compile'
+        argsNotContain: ["'exec'", '"exec"']
+      - type: call
+        callee: 'pickle.loads'
+      - type: call
+        callee: 'pickle.load'
+      - type: call
+        callee: 'yaml.load'
+        argsContain: ['Loader=yaml.Loader']
+      - type: call
+        callee: 'yaml.unsafe_load'
+      - type: call
+        callee: 'Function'
+      - type: call
+        callee: 'setTimeout'
+        argsContain: ['user']
+    unless:
+      - '(?i)#\s*aegis:allow-eval'
+    remediation:
+      title: Replace dynamic evaluation with a parser
+      description: >-
+        Use `json.loads`, `ast.literal_eval`, a schema validator, or an explicit
+        dispatch table keyed by an enum. If evaluation is genuinely required,
+        run it in a sandboxed interpreter with no network and no filesystem.
+      automated: false
+      effort: medium
+      patch: |
+        # before
+        result = eval(llm_output)
+
+        # after
+        import json
+        result = json.loads(llm_output)   # raises on anything that is not data
+    compliance:
+      - framework: owasp-agentic
+        control: ASI02
+        relevant: true
+      - framework: soc2
+        control: 'CC6.6'
+        relevant: true
+      - framework: iso27001
+        control: 'A.8.28'
+        relevant: true
+      - framework: mitre-atlas
+        control: AML.T0050
+        relevant: true
+
+  - id: AEGIS-ASI02-003
+    title: Tool argument taken from model output without validation
+    description: >-
+      A tool argument is populated straight from model output. Models are
+      non-deterministic and adversarially steerable; tool arguments must be
+      validated against a schema (and, where relevant, an allowlist) before use.
+    severity: high
+    confidence: high
+    languages: ['typescript', 'javascript', 'python', 'go']
+    scanners: ['agent', 'repo']
+    taxonomy: ASI02
+    tags: [tool-misuse, input-validation, excessive-agency]
+    patterns:
+      - type: regex
+        pattern: '(?i)(tool|function_call|functionCall|action|tool_call)\s*(\.\w+\s*)?\([^)]*\b(args|arguments|params|parameters|input|action_input|tool_input|query)\s*\)?\s*(?:;|$)'
+      - type: regex
+        pattern: '(?i)(args|arguments|action_input|tool_input)\s*=\s*(llm_output|response\.(text|content|output)|completion|model_output|result\.(text|content)|message\.content)\b'
+      - type: regex
+        pattern: '(?i)\.arguments\s*\)?\s*(?:as|:=)\s*\w+\s*(?:\)|;|$)'
+      - type: regex
+        pattern: '(?i)json\.loads\s*\(\s*(llm_output|response\.text|completion|action_input)'
+    unless:
+      - '(?i)(zod|pydantic|jsonschema|validate|schema\.parse|safeParse|struct\.parse|ajv)'
+    remediation:
+      title: Validate tool arguments against a schema
+      description: >-
+        Parse model output with a strict schema, reject unknown fields, and
+        enforce per-tool allowlists on high-risk arguments such as paths,
+        commands, and URLs.
+      automated: false
+      effort: low
+      patch: |
+        // before
+        const args = JSON.parse(response.text);
+        await runShell(args.command);
+
+        // after
+        import { z } from 'zod';
+        const ToolArgs = z.object({
+          command: z.string().regex(/^git (status|diff|log)( .*)?$/),  // allowlist
+        }).strict();
+        const args = ToolArgs.parse(JSON.parse(response.text));
+        await runShell(args.command);
+    compliance:
+      - framework: owasp-agentic
+        control: ASI02
+        relevant: true
+      - framework: owasp-agentic
+        control: ASI06
+        title: Excessive Agency
+        relevant: true
+      - framework: soc2
+        control: 'CC6.1'
+        title: Logical access security measures
+        relevant: true
+      - framework: nist-ai-rmf
+        control: 'MANAGE 2.2'
+        title: Mechanisms to sustain value and minimise risk
+        relevant: true
+
+  - id: AEGIS-ASI02-004
+    title: Filesystem access with no path restriction
+    description: >-
+      File reads or writes are performed on a path derived from a variable with
+      no allowlisted root and no `..` normalisation. A `read_file` tool without a
+      root restriction is an exfiltration primitive: `../../.ssh/id_rsa` works.
+    severity: critical
+    confidence: high
+    languages: ['typescript', 'javascript', 'python', 'go']
+    scanners: ['agent', 'repo', 'mcp']
+    taxonomy: ASI02
+    cwe: CWE-22
+    tags: [path-traversal, exfiltration, tool-misuse]
+    patterns:
+      - type: regex
+        pattern: '(?i)(?:open|readFile\w*|fs\.(?:readFile|readdir|writeFile)\w*|Path\([^)]*\)\.(?:read_text|write_text)|io\.open)\s*\(\s*(?:[fpb]?["''][^"'']*["'']\s*[\+\.]\s*)?(?:path|file|filename|file_path|filePath|fpath|target|user_path|userInput|user_input|request\.\w+|req\.\w+)\b'
+      - type: regex
+        pattern: '(?i)(?:writeFile|writeFileSync|fs\.writeFile\w*|Path\([^)]*\)\.write_text)\s*\(\s*[^)]*,\s*["''][wa]'
+      - type: regex
+        # A bare `../` matches every relative import in the repository. Traversal is
+        # only interesting when it can actually escape a root: repeated segments,
+        # or a segment that lands in a system directory.
+        pattern: '(?i)(?:\.\./){2,}|\.\.[\\/](\.\.[\\/])*(?:etc|root|home|Users|tmp|var)[\\/]'
+    unless:
+      - '(?i)(resolve\(|realpath|basename\(|startsWith|is_relative_to|normalize\()'
+    remediation:
+      title: Confine file access to an allowlisted root
+      description: >-
+        Resolve the requested path, then verify it is inside the configured root
+        before opening. Reject absolute paths, `..` segments, and symlinks that
+        escape the root.
+      automated: false
+      effort: low
+      patch: |
+        # before
+        def read_file(path):
+            return open(path).read()
+
+        # after
+        from pathlib import Path
+        ROOT = Path("/srv/agent-workspace").resolve()
+
+        def read_file(path: str) -> str:
+            target = (ROOT / path).resolve()
+            if not target.is_relative_to(ROOT):
+                raise PermissionError(f"path escapes workspace: {path}")
+            return target.read_text()
+    compliance:
+      - framework: owasp-agentic
+        control: ASI02
+        relevant: true
+      - framework: soc2
+        control: 'CC6.1'
+        relevant: true
+      - framework: iso27001
+        control: 'A.8.3'
+        title: Information access restriction
+        relevant: true
+      - framework: gdpr
+        control: 'Art. 32'
+        title: Security of processing
+        relevant: true
+
+  - id: AEGIS-ASI02-005
+    title: Outbound HTTP request with a model- or user-controlled URL
+    description: >-
+      An outbound request is made to a URL assembled from untrusted input. This
+      is server-side request forgery: in a sandboxed agent it reaches the cloud
+      metadata service, in a hosted agent it becomes a data exfiltration channel.
+    severity: critical
+    confidence: high
+    languages: ['typescript', 'javascript', 'python', 'go']
+    scanners: ['agent', 'repo', 'mcp']
+    taxonomy: ASI02
+    cwe: CWE-918
+    tags: [ssrf, exfiltration, tool-misuse]
+    patterns:
+      - type: call
+        callee: 'requests.get'
+        argsContain: ['+']
+      - type: call
+        callee: 'requests.post'
+        argsContain: ['+']
+      - type: regex
+        # `fetch(url)` is how every HTTP client is written. SSRF requires the
+        # destination to come from something an attacker influences, so the
+        # variable name must say so. The concatenation prefix is bounded to two
+        # segments because an unbounded `(?:...)*` over a class is ReDoS.
+        pattern: '(?i)\b(?:fetch|axios(?:\.(?:get|post|put|patch|delete))?|requests\.(?:get|post|put|patch)|urlopen|urlretrieve|httpx\.(?:get|post))\s*\(\s*(?:[a-z_]{1,20}\s*[+\.]\s*){0,2}(?:user_?(?:url|input|query|target|host|path)|req(?:uest)?\.(?:body|query|params|headers|path)|body\.(?:url|href|host|target)|payload\.(?:url|host|target)|params\.(?:url|host|target)|input\.(?:url|host)|args\.(?:url|host|target)|target_?url|user_?path|remote_?url)\b'
+      - type: regex
+        pattern: '(?i)fetch\s*\(\s*`[^`]*\$\{'
+      - type: regex
+        pattern: '(?i)http\.Get\s*\(\s*(url|uri|endpoint|target)\b'
+      - type: regex
+        pattern: '(?i)(url|uri|endpoint)\s*=\s*(f?["''][^"'']*\{(url|user|input|query|host))'
+      - type: regex
+        pattern: '(?i)169\.254\.169\.254|metadata\.google\.internal|100\.100\.100\.200'
+    remediation:
+      title: Allowlist outbound destinations
+      description: >-
+        Resolve the hostname, reject private/link-local/metadata ranges and
+        non-HTTP(S) schemes, and compare against an explicit allowlist. Enforce
+        this in a logging egress proxy, not just in application code.
+      automated: false
+      effort: medium
+    compliance:
+      - framework: owasp-agentic
+        control: ASI02
+        relevant: true
+      - framework: soc2
+        control: 'CC6.6'
+        relevant: true
+      - framework: iso27001
+        control: 'A.8.20'
+        title: Networks security
+        relevant: true
+      - framework: mitre-atlas
+        control: AML.T0054
+        title: LLM Jailbreak
+        relevant: false
+
+  # ---------------------------------------------------------------------------
+  # ASI03 — Identity & Privilege Abuse
+  # ---------------------------------------------------------------------------
+  - id: AEGIS-ASI03-001
+    title: Hardcoded credential in source
+    description: >-
+      An API key, token, password, or private key literal is committed in source.
+      In an agent context this is worse than in normal software: the credential is
+      reachable from the prompt context and from every tool the agent can call.
+    severity: critical
+    confidence: confirmed
+    scanners: ['agent', 'repo']
+    taxonomy: ASI03
+    cwe: CWE-798
+    tags: [secret, credentials, supply-chain]
+    patterns:
+      - type: regex
+        pattern: '(?i)(api[_-]?key|apikey|secret[_-]?key|access[_-]?token|auth[_-]?token|password|passwd|client[_-]?secret|private[_-]?key)\s*[:=]\s*["''][^"''\n]{8,}["'']'
+      - type: regex
+        pattern: 'sk-[A-Za-z0-9]{20,}'
+      - type: regex
+        pattern: 'sk-ant-[A-Za-z0-9_\-]{20,}'
+      - type: regex
+        pattern: 'gh[pousr]_[A-Za-z0-9]{30,}'
+      - type: regex
+        pattern: 'AKIA[0-9A-Z]{16}'
+      - type: regex
+        pattern: 'AIza[0-9A-Za-z_\-]{35}'
+      - type: regex
+        pattern: 'xox[baprs]-[0-9A-Za-z\-]{10,}'
+      - type: regex
+        pattern: '-----BEGIN (RSA |EC |DSA |OPENSSH |PGP )?PRIVATE KEY-----'
+      - type: regex
+        pattern: '(?i)(postgres|mysql|mongodb(\+srv)?|redis|amqp)://[^\s:@]+:[^\s:@]+@'
+    unless:
+      - '(?i)(process\.env|os\.environ|getenv\(|ENV\[|Deno\.env|secrets\.|vault:|\$\{?[A-Z_]{3,}\}?|example\.com|xxxx|your[-_ ]|placeholder|<[^>]+>|redacted|CHANGEME|not-a-real)'
+    remediation:
+      title: Move the credential to a secret manager
+      description: >-
+        Load secrets from the environment or a secret manager at startup, and
+        rotate the exposed value — assume it is already in every model's
+        training context and in your git history.
+      automated: true
+      effort: trivial
+      patch: |
+        # before
+        OPENAI_API_KEY = "sk-abc123..."
+        # after
+        import os
+        OPENAI_API_KEY = os.environ["OPENAI_API_KEY"]  # never in source
+    compliance:
+      - framework: owasp-agentic
+        control: ASI03
+        title: Identity and Privilege Abuse
+        relevant: true
+      - framework: soc2
+        control: 'CC6.1'
+        relevant: true
+      - framework: iso27001
+        control: 'A.5.17'
+        title: Authentication information
+        relevant: true
+      - framework: gdpr
+        control: 'Art. 32'
+        relevant: true
+
+  - id: AEGIS-ASI03-002
+    title: Agent authenticates with a shared or ambient credential
+    description: >-
+      The agent acts with a single service credential rather than a per-user
+      identity. Every action in the audit log is unattributable, and one
+      successful prompt injection inherits full authority.
+    severity: high
+    confidence: medium
+    scanners: ['agent', 'mcp', 'repo']
+    taxonomy: ASI03
+    patterns:
+      - type: regex
+        pattern: '(?i)(api[_-]?key|token|credential|authorization)\s*[:=]\s*["'']\$\{?(process\.env|os\.environ)'
+      - type: regex
+        pattern: '(?i)service[_-]account[_-]?(key|token|credential)\s*[:=]'
+      - type: regex
+        pattern: '(?i)(assume_role|impersonate|as_user)\s*[:=]\s*["''][^"'']+["'']'
+    remediation:
+      title: Give the agent a scoped, per-delegation identity
+      description: Use short-lived, least-privilege credentials scoped to the delegated user and the specific action.
+      automated: false
+      effort: high
+    compliance:
+      - framework: owasp-agentic
+        control: ASI03
+        relevant: true
+      - framework: soc2
+        control: 'CC6.1'
+        relevant: true
+      - framework: gdpr
+        control: 'Art. 5'
+        title: Accountability
+        relevant: true
+
+  - id: AEGIS-ASI03-003
+    title: Tool declared with an all-access filesystem scope
+    description: >-
+      An MCP tool or agent tool is granted blanket read/write access to the
+      filesystem rather than a scoped path. Blast radius of any injection becomes
+      the whole filesystem.
+    severity: high
+    confidence: high
+    scanners: ['mcp', 'agent']
+    taxonomy: ASI03
+    tags: [excessive-agency, mcp]
+    patterns:
+      - type: jsonpath
+        path: '$.tools[*].scopes'
+        operator: 'contains'
+        value: 'filesystem:*'
+      - type: jsonpath
+        path: '$.tools[*].permissions'
+        operator: 'contains'
+        value: '*'
+      - type: regex
+        pattern: '(?i)["'']?(read|write|delete|access)["'']?\s*:\s*["'']?(all|\*|/(\*)?)["'']?'
+      - type: regex
+        pattern: '(?i)(--allow-all|--no-sandbox|--dangerously-skip-permissions|--yolo|--full-access)'
+    remediation:
+      title: Scope tools to a least-privilege allowlist
+      description: Replace wildcard scopes with explicit path/verb allowlists and enforce them at the tool layer.
+      automated: true
+      effort: low
+    compliance:
+      - framework: owasp-agentic
+        control: ASI03
+        relevant: true
+      - framework: iso27001
+        control: 'A.8.3'
+        relevant: true
+
+  # ---------------------------------------------------------------------------
+  # ASI04 — Agentic Supply Chain Vulnerabilities
+  # ---------------------------------------------------------------------------
+  - id: AEGIS-ASI04-001
+    title: Dependency installed without a version pin
+    description: >-
+      A package is installed with a floating version range. An agent that
+      installs tools at runtime can pull a malicious new release without any
+      human in the loop, which is the supply-chain execution path for agents.
+    severity: high
+    confidence: high
+    languages: ['python']
+    scanners: ['agent', 'repo']
+    taxonomy: ASI04
+    tags: [supply-chain]
+    patterns:
+      - type: regex
+        pattern: '(?i)subprocess\.(run|call|check_call|Popen)\s*\(\s*\[?["'']?(pip|pip3)\s+install'
+      - type: regex
+        pattern: '(?i)\bpip\s+install\s+(?!.*==)[A-Za-z][\w\-\.]*(\s|$)'
+    remediation:
+      title: Pin and verify every runtime dependency
+      description: >-
+        Install from a lockfile with hashes, or pin exact versions and verify the
+        artifact hash before execution. Never install packages as part of agent
+        execution.
+      automated: false
+      effort: medium
+    compliance:
+      - framework: owasp-agentic
+        control: ASI04
+        title: Agentic Supply Chain Vulnerabilities
+        relevant: true
+      - framework: soc2
+        control: 'CC7.1'
+        title: Vulnerability detection
+        relevant: true
+      - framework: iso27001
+        control: 'A.8.8'
+        title: Management of technical vulnerabilities
+        relevant: true
+      - framework: nist-ai-rmf
+        control: 'MAP 5.1'
+        title: Third-party risk is documented
+        relevant: true
+
+  - id: AEGIS-ASI04-002
+    title: Unpinned or unverified model or plugin loaded at runtime
+    description: >-
+      A model, plugin, or remote skill is loaded from a mutable location (a
+      `latest` tag, a branch, an unsigned URL) with no integrity check.
+    severity: high
+    confidence: high
+    scanners: ['agent', 'repo']
+    taxonomy: ASI04
+    patterns:
+      - type: regex
+        pattern: '(?i)(from_pretrained|load_model|model\s*=\s*["\x27])[^\n]*(main|latest|master|HEAD)'
+      - type: regex
+        pattern: '(?i)(huggingface\.co|hf_hub_download|from_pretrained)\s*\(\s*["''][^"'']*(latest|main)'
+      - type: regex
+        pattern: '(?i)(trust_remote_code\s*=\s*True|trust_remote_code:?\s*true)'
+      - type: regex
+        pattern: '(?i)(allow_patterns\s*=\s*["'']\*)'
+      - type: regex
+        pattern: '(?i)(load_plugin|import_module|importlib\.import_module)\s*\(\s*(user_input|response|llm_output|name_from_model)'
+    remediation:
+      title: Pin model and plugin revisions with integrity verification
+      description: >-
+        Pin to an immutable commit SHA or version, verify a checksum/signature,
+        and disable remote code execution.
+      automated: false
+      effort: medium
+    compliance:
+      - framework: owasp-agentic
+        control: ASI04
+        relevant: true
+      - framework: eu-ai-act
+        control: 'Art. 15'
+        relevant: true
+
+  - id: AEGIS-ASI04-003
+    title: Unsafe YAML deserialization in a package or model config
+    description: >-
+      `yaml.load` without `SafeLoader` instantiates arbitrary Python objects.
+      Model and tool config files are frequently attacker-influenced.
+    severity: high
+    confidence: high
+    languages: ['python']
+    scanners: ['agent', 'repo']
+    taxonomy: ASI04
+    cwe: CWE-502
+    patterns:
+      - type: call
+        callee: 'yaml.load'
+        argsNotContain: ['SafeLoader', 'safe_load', 'CLoader', 'CSafeLoader']
+      - type: call
+        callee: 'yaml.full_load'
+      - type: call
+        callee: 'marshal.loads'
+    remediation:
+      title: Use safe deserialization
+      description: 'Call `yaml.safe_load`, or pass `Loader=yaml.SafeLoader` explicitly.'
+      automated: true
+      effort: trivial
+      patch: |
+        # before
+        cfg = yaml.load(text)
+        # after
+        cfg = yaml.safe_load(text)
+    compliance:
+      - framework: owasp-agentic
+        control: ASI04
+        relevant: true
+      - framework: iso27001
+        control: 'A.8.28'
+        relevant: true
+
+  # ---------------------------------------------------------------------------
+  # ASI05 — Unexpected Code Execution
+  # ---------------------------------------------------------------------------
+  - id: AEGIS-ASI05-001
+    title: Code generated by a model is executed without review
+    description: >-
+      Model-generated code is passed to an interpreter or written to disk and
+      run. The model is an untrusted code generator; treat its output exactly as
+      you would treat a pull request from a stranger.
+    severity: critical
+    confidence: high
+    scanners: ['agent', 'repo']
+    taxonomy: ASI05
+    cwe: CWE-94
+    tags: [rce, generated-code]
+    patterns:
+      - type: regex
+        pattern: '(?i)(exec|eval)\s*\(\s*(code|generated_code|generatedCode|snippet|response\.text|llm_output|completion)\b'
+      - type: regex
+        pattern: '(?i)(writeFileSync|open|Path\([^)]*\)\.write_text)\s*\([^)]*(generated_code|snippet|llm_output)[^)]*\)[\s\S]{0,200}(exec|run|subprocess|spawn|node )'
+      - type: regex
+        pattern: '(?i)(run_in_subprocess|subprocess\.run|spawn)\s*\(\s*\[?\s*["'']?(python|node|bash|sh)["'']?[,\s][^\n]*(code|snippet|llm_output)'
+      - type: regex
+        pattern: '(?i)(sandbox|container|docker)\.run\s*\(\s*[^)]*(code|llm_output|snippet)'
+    remediation:
+      title: Require human review or sandboxed execution for generated code
+      description: >-
+        Never execute model output in the host process. Run it in an ephemeral,
+        network-isolated sandbox with a read-only filesystem and a CPU/memory
+        budget, or require explicit human approval.
+      automated: false
+      effort: high
+    compliance:
+      - framework: owasp-agentic
+        control: ASI05
+        title: Unexpected Code Execution
+        relevant: true
+      - framework: eu-ai-act
+        control: 'Art. 15'
+        relevant: true
+      - framework: mitre-atlas
+        control: AML.T0050
+        relevant: true
+
+  - id: AEGIS-ASI05-002
+    title: Template rendering with a sandbox escape-prone engine
+    description: >-
+      Jinja2, Handlebars, EJS or Freemarker renders a user-controlled string.
+      Server-side template injection reaches code execution in most engines.
+    severity: high
+    confidence: medium
+    scanners: ['agent', 'repo']
+    taxonomy: ASI05
+    cwe: CWE-1336
+    patterns:
+      - type: regex
+        pattern: '(?i)(Template|render_template_string|from_string|compile_templates)\s*\(\s*(f?["''][^"'']*\{(user|input|request|content|llm|response))'
+      - type: regex
+        pattern: '(?i)(ejs\.render|handlebars\.compile|pug\.compile)\s*\(\s*(user|input|request|content|llm)'
+      - type: regex
+        pattern: '(?i)\{\{\s*7\*7\s*\}\}'
+    remediation:
+      title: Use a sandboxed template engine with a fixed template
+      description: Keep the template in code; pass only data to the engine. Disable attribute access and statement blocks in Jinja sandboxes.
+      automated: false
+      effort: medium
+    compliance:
+      - framework: owasp-agentic
+        control: ASI05
+        relevant: true
+
+  # ---------------------------------------------------------------------------
+  # ASI06 — Memory & Context Poisoning
+  # ---------------------------------------------------------------------------
+  - id: AEGIS-ASI06-001
+    title: Agent memory or vector store written from untrusted content
+    description: >-
+      Retrieved or user-supplied text is persisted into agent memory, a vector
+      database, or a summary buffer without sanitisation or provenance. Poisoned
+      memory re-injects on every subsequent turn.
+    severity: high
+    confidence: medium
+    scanners: ['agent', 'repo']
+    taxonomy: ASI06
+    tags: [memory-poisoning, rag]
+    patterns:
+      - type: regex
+        pattern: '(?i)(memory|vectorstore|vector_store|chroma|qdrant|faiss|pinecone|weaviate)\s*\.\s*(add|upsert|insert|add_texts|add_documents|similarity_search)\s*\(\s*(user|input|content|document|response|llm|result|message)'
+      - type: regex
+        pattern: '(?i)(save_memory|add_to_memory|remember|store_memory|write_memory)\s*\(\s*(user|input|content|response|llm|result|message)'
+      - type: regex
+        pattern: '(?i)messages\.append\s*\(\s*\{\s*["'']role["'']\s*:\s*["'']system["'']'
+    remediation:
+      title: Sanitise and attribute memory writes
+      description: >-
+        Never allow user or tool content to enter the system/instruction tier.
+        Tag each memory with its source and trust level, and drop content that
+        contains instruction-like patterns.
+      automated: false
+      effort: medium
+    compliance:
+      - framework: owasp-agentic
+        control: ASI06
+        title: Memory and Context Poisoning
+        relevant: true
+      - framework: owasp-llm
+        control: LLM03
+        title: Training Data Poisoning
+        relevant: true
+
+  - id: AEGIS-ASI06-002
+    title: Conversation history truncated without preserving the system tier
+    description: >-
+      History is trimmed by slicing the message array, which can drop or reorder
+      the system message. Downgrading instruction tier is a form of context
+      manipulation.
+    severity: medium
+    confidence: low
+    scanners: ['agent']
+    taxonomy: ASI06
+    patterns:
+      - type: regex
+        pattern: '(?i)(messages|history|conversation)\s*=\s*(messages|history|conversation)\s*\[\s*-\s*\d+\s*:\s*\]'
+      - type: regex
+        pattern: '(?i)(messages|history)\.(slice|splice|shift|pop)\s*\('
+    remediation:
+      title: Preserve the instruction tier when trimming history
+      description: 'Always keep the system message pinned at index 0 and trim only the conversation turns.'
+      automated: false
+      effort: low
+    compliance:
+      - framework: owasp-agentic
+        control: ASI06
+        relevant: true
+
+  # ---------------------------------------------------------------------------
+  # ASI07 — Insecure Inter-Agent Communication
+  # ---------------------------------------------------------------------------
+  - id: AEGIS-ASI07-001
+    title: Agent-to-agent message channel is unauthenticated or unencrypted
+    description: >-
+      Agents communicate over plain HTTP, or authenticate with a static shared
+      secret in a request header. An agent that can post to the bus can
+      impersonate any other agent.
+    severity: high
+    confidence: high
+    scanners: ['agent', 'mcp', 'repo']
+    taxonomy: ASI07
+    tags: [inter-agent, mtls, transport-security]
+    patterns:
+      - type: regex
+        pattern: '(?i)http://(?!localhost|127\.0\.0\.1|0\.0\.0\.0)[^\s"'']*(agent|orchestrat|crew|swarm|mesh|bus|gateway)'
+      - type: regex
+        pattern: '(?i)(AGENT_(URL|ENDPOINT|BASE_URL)|CREW_URL|AGENT_BUS_URL)\s*[:=]\s*["'']?http://'
+      - type: regex
+        pattern: '(?i)verify\s*=\s*False|rejectUnauthorized\s*:\s*false|InsecureSkipVerify\s*:\s*true|NODE_TLS_REJECT_UNAUTHORIZED\s*=\s*["'']?0'
+    remediation:
+      title: Require mutual TLS and signed inter-agent messages
+      description: >-
+        Use mTLS or signed, replay-protected tokens for every agent-to-agent hop,
+        and disable TLS verification bypasses.
+      automated: true
+      effort: medium
+      patch: |
+        # before
+        requests.get("http://billing-agent.internal/charge", verify=False)
+        # after
+        requests.get("https://billing-agent.internal/charge", verify=True, timeout=10)
+    compliance:
+      - framework: owasp-agentic
+        control: ASI07
+        title: Insecure Inter-Agent Communication
+        relevant: true
+      - framework: soc2
+        control: 'CC6.7'
+        title: Transmission and movement of information
+        relevant: true
+      - framework: iso27001
+        control: 'A.8.20'
+        relevant: true
+      - framework: eu-ai-act
+        control: 'Art. 15'
+        relevant: true
+
+  - id: AEGIS-ASI07-002
+    title: Agent output passed to a downstream tool without validation
+    description: >-
+      The response of one agent is consumed directly as input to another agent or
+      tool. Insecure output handling lets one compromised agent launder an
+      injection into every downstream consumer.
+    severity: high
+    confidence: high
+    scanners: ['agent', 'repo']
+    taxonomy: ASI07
+    tags: [output-handling, multi-agent]
+    patterns:
+      - type: regex
+        pattern: '(?i)(next_agent|sub_agent|child_agent|handoff|delegate)\s*\(\s*(response|resp|result|output|completion|agent_response)\.'
+      - type: regex
+        pattern: '(?i)(await|call|invoke|send)\s*\(?\s*(other_agent|downstream|peer)\w*\s*,?\s*\{?[^)]*\}\s*[,)]?\s*(response|resp|result|output)\b'
+      - type: regex
+        pattern: '(?i)(task|message|prompt)\s*=\s*(response|resp|result|output|completion)\.(text|content|message)\b'
+    unless:
+      - '(?i)(validate|schema|safeParse|parse\(|zod|pydantic|assert_|raise )'
+    remediation:
+      title: Treat every agent response as untrusted input
+      description: >-
+        Validate downstream input against a schema, strip instruction-like
+        content, and re-inject a fixed system prompt at every hop.
+      automated: false
+      effort: medium
+    compliance:
+      - framework: owasp-agentic
+        control: ASI07
+        relevant: true
+      - framework: owasp-llm
+        control: LLM05
+        title: Improper Output Handling
+        relevant: true
+      - framework: iso27001
+        control: 'A.8.26'
+        title: Application security requirements
+        relevant: true
+
+  # ---------------------------------------------------------------------------
+  # ASI08 — Cascading Failures
+  # ---------------------------------------------------------------------------
+  - id: AEGIS-ASI08-001
+    title: Unbounded agent loop with no iteration or cost ceiling
+    description: >-
+      A `while` loop drives the agent with no maximum iteration count, no token
+      budget, and no wall-clock deadline. This is Model DoS: a loop triggered by
+      attacker input can exhaust budget, hammer downstream APIs, or wedge the
+      tool registry.
+    severity: high
+    confidence: high
+    scanners: ['agent', 'repo']
+    taxonomy: ASI08
+    cwe: CWE-834
+    tags: [dos, resource-exhaustion, unbounded-loop]
+    patterns:
+      # Leading whitespace is allowed on both the loop and the body line, so
+      # a loop nested inside a function is detected just like a top-level one.
+      # `[\w.]*` allows a dotted call such as `executor.ainvoke(...)`, which is
+      # how most agent frameworks are actually invoked.
+      - type: regex
+        pattern: '(?i)while\s+True\s*:[ \t]*\n(?:[ \t]*[^\n]*\n){0,3}?[ \t]*(?:result|response|output|res|answer|reply)\s*=\s*(?:await\s+)?[\w.]*\('
+      - type: regex
+        pattern: '(?i)while\s+True\s*:[ \t]*\n(?:[ \t]*[^\n]*\n){0,3}?[ \t]*(?:await\s+)?[\w.]*(?:agent|llm|chat|completion|invoke|executor|generate)[\w.]*\s*\('
+      - type: regex
+        pattern: '(?i)while\s*\(\s*true\s*\)\s*\{[\s\S]{0,500}?\w*(?:agent|llm|chat|completion|invoke|executor)\w*\s*\.\s*\w*\s*\('
+      - type: regex
+        pattern: '(?i)for\s+[^\n]*range\(\s*(?:10\s*\*\*\s*\d|999|9999|10000|100000|float\(.inf.\))\s*\)'
+      - type: regex
+        pattern: '(?i)(max_iterations|max_steps|max_turns|maxTurns|recursion_limit|iteration_limit)\s*=\s*(None|undefined|null|-1|0|float\(["\x27]inf)'
+      - type: regex
+        pattern: '(?i)for\s*\(;;\)|do\s*\{'
+    remediation:
+      title: Bound every agent loop
+      description: >-
+        Set an explicit maximum iteration count, a token/step budget, and a
+        wall-clock deadline. Enforce them in the orchestrator, not just the loop
+        body, and abort the whole agent on breach.
+      automated: false
+      effort: low
+      patch: |
+        # before
+        while True:
+            resp = agent.run(messages)
+            if resp.done: break
+
+        # after
+        MAX_STEPS, deadline = 25, time.monotonic() + 120
+        for step in range(MAX_STEPS):
+            if time.monotonic() > deadline:
+                raise AgentBudgetExceeded("step budget exhausted")
+            resp = agent.run(messages)
+            if resp.done:
+                break
+        else:
+            raise AgentBudgetExceeded("max steps exceeded")
+    compliance:
+      - framework: owasp-agentic
+        control: ASI08
+        title: Cascading Failures
+        relevant: true
+      - framework: soc2
+        control: 'CC7.2'
+        title: Monitoring for anomalies
+        relevant: true
+      - framework: nist-ai-rmf
+        control: 'MEASURE 2.5'
+        relevant: true
+
+  - id: AEGIS-ASI08-002
+    title: No timeout on a model or tool network call
+    description: >-
+      HTTP or SDK calls to a model or tool have no timeout and no retry budget.
+      A single slow dependency stalls the whole agent, and retries without a
+      ceiling turn a transient failure into a self-inflicted DoS.
+    severity: medium
+    confidence: high
+    scanners: ['agent', 'repo']
+    taxonomy: ASI08
+    tags: [dos, timeout]
+    patterns:
+      - type: call
+        callee: 'requests.get'
+        argsNotContain: ['timeout']
+      - type: call
+        callee: 'requests.post'
+        argsNotContain: ['timeout']
+      - type: regex
+        pattern: '(?i)(fetch|axios)\s*\(\s*[^)\n]{0,200}(?<!timeout)[^)\n]{0,60}\)\s*;?\s*$'
+      - type: regex
+        pattern: '(?i)httpx\.(get|post|Client)\s*\((?![\s\S]{0,120}timeout)'
+    remediation:
+      title: Set explicit timeouts and retry ceilings
+      description: Use a per-request timeout (connect + read) and cap total retries with exponential backoff.
+      automated: false
+      effort: trivial
+    compliance:
+      - framework: owasp-agentic
+        control: ASI08
+        relevant: true
+      - framework: iso27001
+        control: 'A.8.6'
+        title: Capacity management
+        relevant: true
+
+  - id: AEGIS-ASI08-003
+    title: Agent retries a side-effecting tool without idempotency control
+    description: >-
+      A tool that writes, pays, sends or deletes is retried on failure without
+      an idempotency key. A cascading retry storm duplicates real-world effects.
+    severity: medium
+    confidence: low
+    scanners: ['agent']
+    taxonomy: ASI08
+    patterns:
+      - type: regex
+        pattern: '(?i)for\s+\w+\s+in\s+range\s*\(\s*\d*\s*\)\s*:\s*\n\s*(?:[^\n]*\n){0,4}?\s*(try|except|retry)'
+      - type: regex
+        pattern: '(?i)while\s+not\s+success\s*:\s*\n[\s\S]{0,200}?(payment|charge|send_email|delete|transfer|post)\w*\s*\('
+    remediation:
+      title: Add idempotency keys to side-effecting tools
+      description: Generate a stable idempotency key per logical operation and reuse it across retries.
+      automated: false
+      effort: medium
+    compliance:
+      - framework: owasp-agentic
+        control: ASI08
+        relevant: true
+
+  # ---------------------------------------------------------------------------
+  # ASI09 — Human-Agent Trust Exploitation
+  # ---------------------------------------------------------------------------
+  - id: AEGIS-ASI09-001
+    title: Agent takes irreversible action with no human approval gate
+    description: >-
+      Destructive or irreversible operations (payments, deletions, outbound
+      messages, production deploys) execute with no human-in-the-loop. This is
+      the OWASP overreliance risk: the agent is trusted beyond what it can be
+      held accountable for.
+    severity: high
+    confidence: medium
+    scanners: ['agent', 'mcp']
+    taxonomy: ASI09
+    cwe: CWE-862
+    tags: [human-in-the-loop, overreliance, excessive-agency]
+    patterns:
+      - type: regex
+        # `delete(` alone matches Map/Set/Array.remove and ORM helpers, which is most
+        # collection manipulation in any real codebase. Require it to look like a
+        # destructive operation on a resource rather than a method call.
+        pattern: '(?i)\b(?:db|database|table|collection|repo|repository|store|bucket|queue|file|folder|dir|directory|user|account|record|row|doc|document|key|secret|policy|rule)s?\s*\.\s*(?:delete|remove|destroy|drop|purge|wipe|truncate)\s*\(|\b(?:rm\s+-rf|shred|drop\s+table|truncate\s+table|DELETE\s+FROM)\b'
+      - type: regex
+        pattern: '(?i)(stripe\.|payments?\.)(charges?\.create|refunds?\.create|transfers?\.create|payouts?\.)'
+      # A payment, refund, transfer or charge endpoint being called directly.
+      - type: regex
+        pattern: '(?i)(refund|charge|payment|transfer|payout|wire)[_a-z]*\s*\('
+      - type: regex
+        pattern: '(?i)(requests|fetch|axios|httpx)\.(post|put|patch)\s*\([^)\n]{0,160}(refund|charge|payment|transfer|payout|/v\d+/(payments|charges))'
+      - type: regex
+        pattern: '(?i)(send_email|send_mail|send_message|post_to_slack|publish|tweet|deploy|release)\s*\('
+      - type: regex
+        pattern: '(?i)(kubectl\s+(delete|apply|rollout)|terraform\s+(apply|destroy)|aws\s+.*--force)'
+    unless:
+      - '(?i)(require_?approval|human_?approval|approval_?(?:required|gate|flow)|confirm\(|\bconfirm\b\s*[=:]|dry_?run|--dry-run|human_in_the_loop|ask_user|needs_?approval)'
+    remediation:
+      title: Add a human approval gate for irreversible actions
+      description: >-
+        Require explicit human confirmation for destructive, financial, or
+        outbound-communication actions. Present the intended action, its target,
+        and its exact parameters.
+      automated: false
+      effort: medium
+    compliance:
+      - framework: owasp-agentic
+        control: ASI09
+        title: Human-Agent Trust Exploitation
+        relevant: true
+      - framework: eu-ai-act
+        control: 'Art. 14'
+        title: Human oversight
+        relevant: true
+      - framework: eu-ai-act
+        control: 'Art. 5'
+        title: Prohibited practices
+        relevant: true
+      - framework: soc2
+        control: 'CC6.1'
+        relevant: true
+      - framework: iso27001
+        control: 'A.5.15'
+        title: Access control
+        relevant: true
+
+  - id: AEGIS-ASI09-002
+    title: Agent presents model output as verified fact
+    description: >-
+      Model output is rendered to an end user with no provenance, confidence
+      signal, or citation. Users cannot distinguish a grounded answer from a
+      hallucination, which is the mechanism behind human-agent trust
+      exploitation.
+    severity: medium
+    confidence: low
+    scanners: ['agent']
+    taxonomy: ASI09
+    tags: [overreliance, hallucination]
+    patterns:
+      - type: regex
+        pattern: '(?i)(print|return|res\.send|render|return\s+jsonify)\s*\(\s*(response|completion|resp)\.(text|content|message)\s*\)'
+      - type: regex
+        pattern: '(?i)(confidence|citation|source|sources|verified|grounding)\s*[:=]\s*(None|null|undefined|\[\]|\{\})'
+    remediation:
+      title: Attach provenance and uncertainty to agent output
+      description: >-
+        Include citations, tool provenance, and an explicit confidence or
+        "unverified" marker, and make the human review path obvious.
+      automated: false
+      effort: medium
+    compliance:
+      - framework: eu-ai-act
+        control: 'Art. 13'
+        title: Transparency and provision of information
+        relevant: true
+      - framework: eu-ai-act
+        control: 'Art. 12'
+        title: Record-keeping
+        relevant: true
+      - framework: nist-ai-rmf
+        control: 'MEASURE 2.11'
+        relevant: true
+
+  - id: AEGIS-ASI09-003
+    title: Model provider switched without re-validation of safety behaviour
+    description: >-
+      The model identifier is fetched from configuration at runtime, allowing a
+      model swap that no safety evaluation covered. Model changes are code
+      changes when your system is an agent.
+    severity: medium
+    confidence: low
+    scanners: ['agent']
+    taxonomy: ASI09
+    patterns:
+      - type: regex
+        pattern: '(?i)(model|MODEL)\s*[:=]\s*(os\.environ\.get|process\.env|getenv)'
+      - type: regex
+        pattern: '(?i)(model_name|model_id|MODEL_NAME)\s*=\s*(req|request|user|payload|body)\.'
+    remediation:
+      title: Pin the model and re-run red teaming on change
+      description: 'Pin the model version in code, and require an Aegis red-team run to pass before a new model is promoted.'
+      automated: false
+      effort: low
+    compliance:
+      - framework: eu-ai-act
+        control: 'Art. 9'
+        title: Risk management system
+        relevant: true
+      - framework: nist-ai-rmf
+        control: 'GOVERN 4.1'
+        relevant: true
+
+  # ---------------------------------------------------------------------------
+  # ASI10 — Rogue Agents
+  # ---------------------------------------------------------------------------
+  - id: AEGIS-ASI10-001
+    title: Agent declared unrestricted autonomy
+    description: >-
+      The agent is configured for full autonomy with no tool allowlist, no
+      action gate, and no audit trail. A rogue agent is one that has drifted past
+      every control the system had.
+    severity: critical
+    confidence: high
+    scanners: ['agent', 'mcp', 'repo']
+    taxonomy: ASI10
+    cwe: CWE-250
+    tags: [excessive-agency, rogue-agent]
+    patterns:
+      - type: regex
+        pattern: '(?i)(autonomy|AGENT_AUTONOMY|mode)\s*[:=]\s*["'']?(full|unrestricted|autonomous|god|unlimited)'
+      - type: regex
+        pattern: '(?i)(allow_all_tools|enable_all_tools|tools\s*:\s*["'']\*|ALL_TOOLS\s*=\s*\*|disable_safety|disable_guardrails|bypass_safety)'
+      - type: regex
+        pattern: '(?i)(--dangerously-skip-permissions|--no-sandbox|--allow-all|--yolo|--full-access|--disable-web-security)'
+    # These guards must be specific. A bare `log` or `test` matches ordinary
+    # words like "logging" and "latest", which silently suppressed every rogue
+    # autonomy finding in real codebases — precisely the findings that matter.
+    unless:
+      - '(?i)#\s*(?:aegis:)?(?:dev_only|example|noqa)'
+      - '(?i)(?:development_only|for_["\x27]?(?:development|testing)["\x27]?\s*:\s*(?:true|false))'
+      - '\b(?:EXAMPLE|DEMO)_[A-Z_]+\b'
+    remediation:
+      title: Replace unrestricted autonomy with a bounded action set
+      description: >-
+        Enumerate the tools the agent may use, gate irreversible actions behind
+        approval, and write an immutable audit log of every action.
+      automated: false
+      effort: high
+    compliance:
+      - framework: owasp-agentic
+        control: ASI10
+        title: Rogue Agents
+        relevant: true
+      - framework: eu-ai-act
+        control: 'Art. 14'
+        title: Human oversight
+        relevant: true
+      - framework: soc2
+        control: 'CC6.1'
+        relevant: true
+      - framework: iso27001
+        control: 'A.8.15'
+        title: Logging
+        relevant: true
+      - framework: gdpr
+        control: 'Art. 5'
+        title: Accountability
+        relevant: true
+
+  - id: AEGIS-ASI10-002
+    title: No audit log for agent actions
+    description: >-
+      The agent performs privileged actions without writing an audit record.
+      Without a trail, neither incident response nor accountability is possible —
+      a hard requirement under SOC 2, ISO 27001 and the EU AI Act.
+    severity: high
+    confidence: medium
+    scanners: ['agent', 'mcp']
+    taxonomy: ASI10
+    tags: [audit, logging, accountability]
+    patterns:
+      - type: regex
+        pattern: '(?i)(def |function )(run_agent|agent_run|execute_agent|main_loop|agent_main)\s*\('
+      - type: regex
+        pattern: '(?i)(logging\.(info|warn|error)|logger\.(info|warn|error)|console\.(log|error))'
+    unless:
+      - '(?i)(audit|logger|logging|structlog|winston|pino|zap\.|slf4j|log4j|sentry|telemetry|trace|span)'
+    remediation:
+      title: Emit an immutable audit trail for every agent action
+      description: >-
+        Log actor, action, target, arguments, outcome, and decision rationale for
+        each tool call and approval decision. Ship to append-only storage.
+      automated: false
+      effort: medium
+    compliance:
+      - framework: owasp-agentic
+        control: ASI10
+        relevant: true
+      - framework: soc2
+        control: 'CC7.3'
+        title: Evaluation of security events
+        relevant: true
+      - framework: iso27001
+        control: 'A.8.15'
+        title: Logging
+        relevant: true
+      - framework: eu-ai-act
+        control: 'Art. 12'
+        title: Record-keeping
+        relevant: true
+      - framework: gdpr
+        control: 'Art. 30'
+        title: Records of processing activities
+        relevant: true
+
+  - id: AEGIS-ASI10-003
+    title: Agent state mutated by a background thread or scheduler
+    description: >-
+      Agent state is mutated outside the orchestrated turn lifecycle. A
+      concurrent or scheduled mutation is how a rogue agent accumulates
+      capabilities and history rewrites itself out of the audit trail.
+    severity: medium
+    confidence: low
+    scanners: ['agent']
+    taxonomy: ASI10
+    patterns:
+      - type: regex
+        pattern: '(?i)(threading\.Thread|asyncio\.create_task|setInterval|BackgroundTasks|@app\.task|schedule\.every)'
+      - type: regex
+        pattern: '(?i)global\s+\w*(state|memory|history|config)\s*=|global\s+(STATE|MEMORY|CONFIG)'
+    unless:
+      - '(?i)(lock\(|mutex|semaphore|Lock\(|RLock|asyncio\.Lock)'
+    remediation:
+      title: Guard agent state with explicit concurrency control
+      description: 'Serialise state mutation behind a lock owned by the orchestrator, and forbid mutation from outside the turn loop.'
+      automated: false
+      effort: medium
+    compliance:
+      - framework: owasp-agentic
+        control: ASI10
+        relevant: true
+      - framework: iso27001
+        control: 'A.8.28'
+        relevant: true

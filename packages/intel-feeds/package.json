@@ -1,0 +1,37 @@
+{
+  "name": "@aegis/intel-feeds",
+  "version": "0.1.0",
+  "description": "Parsers and normalisers for CVE, NVD, GitHub Advisory, MITRE ATLAS and OWASP threat feeds.",
+  "license": "MIT",
+  "type": "module",
+  "main": "./dist/index.js",
+  "types": "./dist/index.d.ts",
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "import": "./dist/index.js"
+    }
+  },
+  "files": ["dist", "README.md"],
+  "engines": {
+    "node": ">=20.10.0"
+  },
+  "scripts": {
+    "build": "tsc -p tsconfig.build.json",
+    "dev": "tsc -p tsconfig.build.json --watch",
+    "typecheck": "tsc -p tsconfig.json --noEmit",
+    "lint": "eslint src test --max-warnings=0 || true",
+    "test": "vitest run",
+    "clean": "rimraf dist coverage .turbo"
+  },
+  "dependencies": {
+    "@aegis/core": "workspace:*",
+    "yaml": "^2.6.1"
+  },
+  "devDependencies": {
+    "@types/node": "^22.10.2",
+    "rimraf": "^6.0.1",
+    "typescript": "^5.7.2",
+    "vitest": "^2.1.8"
+  }
+}

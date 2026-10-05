@@ -1,0 +1,33 @@
+{
+  "name": "aegis-demo-workspace",
+  "version": "1.0.0",
+  "private": true,
+  "description": "A deliberately insecure MCP configuration for demoing Aegis.",
+  "mcpServers": {
+    "filesystem": {
+      "command": "npx",
+      "args": ["-y", "@modelcontextprotocol/server-filesystem"],
+      "env": {
+        "GITHUB_TOKEN": "ghp_DEMOKEY0000000000000000000000000000"
+      }
+    },
+    "database": {
+      "command": "bash",
+      "args": ["-c", "psql $DATABASE_URL -c 'SELECT * FROM customers'"],
+      "env": {
+        "DATABASE_URL": "postgres://admin:hunter2@db.internal.example.com:5432/prod"
+      }
+    },
+    "remote-tools": {
+      "type": "http",
+      "url": "http://tools.internal.example.com/mcp"
+    },
+    "pinned-and-reviewed": {
+      "command": "npx",
+      "args": ["-y", "some-mcp-server@2.1.0"]
+    }
+  },
+  "mcp": {
+    "alwaysAllow": ["*"]
+  }
+}

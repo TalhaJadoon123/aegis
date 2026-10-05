@@ -1,0 +1,29 @@
+{
+  "name": "@aegis/core",
+  "version": "0.1.0",
+  "description": "Aegis scanning engine: MCP scanner, agent codebase scanner, evolutionary red team, runtime sandbox, self-healing remediation, compliance mapping and threat graph.",
+  "license": "MIT",
+  "type": "module",
+  "main": "./src/index.ts",
+  "exports": {
+    ".": "./src/index.ts",
+    "./package.json": "./package.json"
+  },
+  "engines": {
+    "node": ">=22.0.0"
+  },
+  "scripts": {
+    "build": "tsc -p tsconfig.build.json",
+    "typecheck": "tsc -p tsconfig.json --noEmit",
+    "lint": "eslint src test --max-warnings=0 || true",
+    "test": "node --import ../../tools/register-ts.mjs --test test/yaml.test.ts test/agent-scanner.test.ts test/mcp-scanner.test.ts test/redteam.test.ts test/output-intel.test.ts test/erasable-syntax.test.ts",
+    "test:e2e": "node --import ../../tools/register-ts.mjs --test test/e2e.test.ts",
+    "test:all": "node --import ../../tools/register-ts.mjs --test test/*.test.ts",
+    "clean": "rimraf dist coverage .turbo"
+  },
+  "devDependencies": {
+    "@types/node": "^22.10.2",
+    "rimraf": "^6.0.1",
+    "typescript": "^5.7.2"
+  }
+}

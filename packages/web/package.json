@@ -1,0 +1,14 @@
+{
+  "name": "@aegis/web",
+  "version": "0.1.0",
+  "private": true,
+  "description": "Aegis dashboard and desktop launcher — runnable fully on-premise.",
+  "license": "SEE LICENCE IN README.md",
+  "type": "module",
+  "scripts": {
+    "start": "node --import ../../tools/register-ts.mjs src/bin.mts --data .aegis/dashboard --port 8080",
+    "desktop": "node --import ../../tools/register-ts.mjs src/bin-desktop.mts --data .aegis/dashboard --port 8080",
+    "typecheck": "tsc -p ../../tsconfig.publish.json --noEmit",
+    "clean": "node -e \"require('fs').rmSync('build',{recursive:true,force:true})\""
+  }
+}

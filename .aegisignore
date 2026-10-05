@@ -1,0 +1,21 @@
+# Paths Aegis should not scan.
+#
+# `.gitignore` is also honoured; this file exists for paths you want Aegis to
+# skip but that git should still track -- generated reports, sandbox workspaces,
+# and scratch output.
+
+# Demos are deliberately insecure and exist to be found. Scanning them makes
+# the tool's own output useless in a demo.
+demos/
+docs/
+
+# Test fixtures are intentionally vulnerable. The test suite asserts on them;
+# a scan of the repo does not need to re-report them.
+packages/core/test/fixtures/
+packages/rules/.aegisignore
+
+# Generated artefacts
+*.sarif
+aegis-report.*
+aegis-supply-chain.html
+sandbox-output/

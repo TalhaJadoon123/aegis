@@ -1,0 +1,18 @@
+CC0 1.0 Universal (CC0 1.0) - Public Domain Dedication
+======================================================
+
+The Aegis rule definitions in this directory are dedicated to the public domain
+under CC0 1.0 Universal. You may copy, modify, distribute, and perform the work,
+even for commercial purposes, all without asking permission.
+
+Full legal text: https://creativecommons.org/publicdomain/zero/1.0/legalcode
+
+Summary of the waiver
+---------------------
+
+To the extent possible under law, the author(s) of these rule files have waived
+all copyright and related or neighboring rights to these files. You may treat
+them as public domain and use them without restriction.
+
+The accompanying source code of the Aegis engine and CLI is licensed under the
+MIT License. Only the YAML rule definitions in this directory are CC0.

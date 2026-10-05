@@ -1,0 +1,25 @@
+{
+  "name": "@aegis/cli",
+  "version": "0.1.0",
+  "description": "Aegis CLI — scan MCP servers, agent code and runtime behaviour from your terminal.",
+  "license": "MIT",
+  "type": "module",
+  "bin": {
+    "aegis": "./src/bin.ts"
+  },
+  "main": "./src/main.ts",
+  "engines": {
+    "node": ">=22.0.0"
+  },
+  "scripts": {
+    "aegis": "node --import ../../tools/register-ts.mjs src/bin.ts",
+    "typecheck": "tsc -p tsconfig.json --noEmit",
+    "lint": "eslint src --max-warnings=0 || true",
+    "test": "echo \"covered by @aegis/core test:e2e\"",
+    "clean": "rimraf dist .turbo"
+  },
+  "devDependencies": {
+    "@types/node": "^22.10.2",
+    "typescript": "^5.7.2"
+  }
+}

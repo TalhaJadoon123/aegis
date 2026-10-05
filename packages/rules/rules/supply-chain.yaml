@@ -1,0 +1,229 @@
+id: supply-chain
+version: 1.0.0
+name: Supply Chain & Dependency Hygiene
+description: >-
+  Rules for the dependency and build surface of agent systems: floating versions,
+  unverified downloads, install-time execution, and untrusted registries.
+
+rules:
+  - id: AEGIS-SUP-001
+    title: Dependency declared with a floating version range
+    description: >-
+      A package version uses `^`, `~`, `*`, `latest`, or a bare major range. A
+      new release is pulled in without review, and a compromised maintainer
+      account reaches every agent that installs it.
+    severity: medium
+    confidence: high
+    scanners: ['repo', 'agent']
+    taxonomy: ASI04
+    cwe: CWE-1104
+    patterns:
+      - type: regex
+        pattern: '"[\w@\.\-]+"\s*:\s*"\s*[\^~*]|"\s*latest\s*"'
+      - type: regex
+        pattern: '"[\w@\.\-]+"\s*:\s*">=\s*[\d\.]+'
+      - type: regex
+        pattern: '["''][\w\.\-]+==[\d\.]+[\d\.\*]*["'']'
+      - type: regex
+        pattern: '^\s*[\w\.\-]+\s*==\s*\*\s*$'
+    unless:
+      - '(?i)(workspace:|file:|link:|file://|github:|npm:|git\+|https?://)'
+    remediation:
+      title: Pin exact versions and commit the lockfile
+      description: >-
+        Use exact versions with a committed lockfile, and enable `--frozen-lockfile`
+        in CI. For Python, pin with hashes via `pip-compile --generate-hashes`.
+      automated: true
+      effort: low
+    compliance:
+      - framework: soc2
+        control: 'CC7.1'
+        relevant: true
+      - framework: iso27001
+        control: 'A.8.8'
+        relevant: true
+      - framework: nist-ai-rmf
+        control: 'MAP 5.1'
+        relevant: true
+
+  - id: AEGIS-SUP-002
+    title: Package installed from a non-default registry
+    description: >-
+      An install points at a custom, mirror, or plain-HTTP registry. These are
+      standard dependency-confusion and typosquat vectors, and HTTP registries
+      have no integrity guarantee at all.
+    severity: high
+    confidence: high
+    scanners: ['repo', 'agent']
+    taxonomy: ASI04
+    cwe: CWE-829
+    patterns:
+      - type: regex
+        pattern: '--registry(=|\s+)http://'
+      - type: regex
+        pattern: '(?i)registry\s*[:=]\s*["\x27]?http://(?!localhost|127\.0\.0\.1)'
+      - type: regex
+        pattern: '(?i)index-url\s*=\s*http://'
+      - type: regex
+        pattern: '(?i)(--extra-index-url|--index-url)\s+http://'
+    remediation:
+      title: Use HTTPS registries with integrity verification
+      description: 'Point at an internal proxy over HTTPS with allowlisting, and keep a committed lockfile with integrity hashes.'
+      automated: true
+      effort: trivial
+    compliance:
+      - framework: soc2
+        control: 'CC7.1'
+        relevant: true
+      - framework: iso27001
+        control: 'A.8.8'
+        relevant: true
+
+  - id: AEGIS-SUP-003
+    title: Install script executes arbitrary code
+    description: >-
+      `postinstall`, `preinstall`, `prepare` and similar lifecycle hooks run
+      arbitrary code at install time. A malicious package does not need any
+      runtime exploit — it runs during `npm install`.
+    severity: medium
+    confidence: high
+    scanners: ['repo']
+    taxonomy: ASI04
+    patterns:
+      - type: regex
+        pattern: '"(pre|post)?install"\s*:\s*"[^"]*(curl|wget|bash|sh |node -e|python -c|eval|base64)'
+      - type: regex
+        pattern: '"(pre|post)?install"\s*:\s*"[^"]*(http://|wget |curl )'
+      - type: regex
+        pattern: '"prepare"\s*:\s*"[^"]*(curl|wget|bash|sh |node -e|python -c)'
+    remediation:
+      title: Audit and pin lifecycle hooks
+      description: 'Review every install hook; replace downloads with a vendored artifact and verify checksums. Disable scripts in CI where possible.'
+      automated: false
+      effort: medium
+      patch: |
+        # .npmrc
+        ignore-scripts=true
+    compliance:
+      - framework: soc2
+        control: 'CC7.1'
+        relevant: true
+      - framework: iso27001
+        control: 'A.8.19'
+        title: Installation of software on operational systems
+        relevant: true
+
+  - id: AEGIS-SUP-004
+    title: Model or model file downloaded at runtime without integrity check
+    description: >-
+      A model artifact is fetched over the network at runtime with no checksum,
+      signature, or pinned revision. Whatever answers that request becomes the
+      agent's brain.
+    severity: high
+    confidence: high
+    scanners: ['agent']
+    taxonomy: ASI04
+    cwe: CWE-494
+    patterns:
+      - type: regex
+        pattern: '(?i)(huggingface_hub|snapshot_download|hf_hub_download|model_download)\s*\('
+      - type: regex
+        pattern: '(?i)(from_pretrained|AutoModel|load_model|download_model)\s*\(\s*["''][^"'']+["'']\s*\)'
+      - type: regex
+        pattern: '(?i)(wget|curl)\s+[^\n]*(gguf|safetensors|bin|pt|onnx|h5)'
+    unless:
+      - '(?i)(revision\s*=|revision=|sha256|checksum|verify|signature|hf_hash|etag|@[0-9a-f]{7,40})'
+    remediation:
+      title: Pin the revision and verify the artifact hash
+      description: >-
+        Pin to a commit SHA, record the expected SHA-256, and verify before load.
+        Fail closed on mismatch.
+      automated: false
+      effort: medium
+      patch: |
+        from huggingface_hub import snapshot_download
+        path = snapshot_download(
+            repo_id="org/model",
+            revision="a1b2c3d4e5f6",        # immutable commit, not `main`
+            allow_patterns=["*.json", "*.safetensors"],
+        )
+        # verify_sha256(path, EXPECTED_SHA256) -> raises on mismatch
+    compliance:
+      - framework: eu-ai-act
+        control: 'Art. 15'
+        relevant: true
+      - framework: nist-ai-rmf
+        control: 'MAP 5.1'
+        relevant: true
+      - framework: soc2
+        control: 'CC7.1'
+        relevant: true
+
+  - id: AEGIS-SUP-005
+    title: Known-dangerous agent-relevant dependency in use
+    description: >-
+      A dependency with a documented history of code execution in agent contexts
+      is present. Aegis flags these by name so teams can confirm they have a
+      compensating control rather than discovering the exposure during an audit.
+    severity: medium
+    confidence: medium
+    scanners: ['repo', 'agent']
+    taxonomy: ASI04
+    patterns:
+      - type: regex
+        pattern: '"(langchain|langchain-experimental|llama-index|llama_index|autogen|crewai)"'
+      - type: regex
+        pattern: '"(e2b|modal|runloop|langchain-sandbox)"'
+    unless:
+      - '(?i)(sandbox|patched|fork:|overrides|patch-package|resolutions)'
+    remediation:
+      title: Confirm a compensating control for this dependency
+      description: >-
+        These libraries execute code and manage agent state. Confirm you run them
+        in a sandbox, that you are on a patched version, and that overrides are
+        committed.
+      automated: false
+      effort: medium
+    compliance:
+      - framework: soc2
+        control: 'CC7.1'
+        relevant: false
+      - framework: nist-ai-rmf
+        control: 'MAP 5.1'
+        relevant: false
+
+  - id: AEGIS-SUP-006
+    title: Agent loads plugins or extensions from a mutable path
+    description: >-
+      Plugins, skills, tools, or connectors are discovered at runtime from a
+      directory or a remote manifest. Anything that can write a file there gains
+      the agent's full tool access.
+    severity: high
+    confidence: medium
+    scanners: ['agent', 'mcp']
+    taxonomy: ASI04
+    cwe: CWE-426
+    patterns:
+      - type: regex
+        pattern: '(?i)(loadPlugins|load_plugins|discover_tools|scan_tools|load_extensions|register_tools)\s*\(\s*["'']?(~|/|plugins|extensions|tools|\./|\*)'
+      - type: regex
+        pattern: '(?i)(importlib|require|glob|readdir|readdirSync|walk)\s*\(?\s*["''][^"'']*(plugins|skills|extensions|tools)["'']'
+    unless:
+      - '(?i)(allowlist|signature|verify|checksum|sha256|manifest|integrity|pin)'
+    remediation:
+      title: Verify plugin provenance and integrity
+      description: >-
+        Load plugins only from a pinned, integrity-checked manifest. Reject
+        unsigned or unlisted plugins, and log every load with its hash.
+      automated: false
+      effort: high
+    compliance:
+      - framework: owasp-agentic
+        control: ASI04
+        relevant: true
+      - framework: soc2
+        control: 'CC7.1'
+        relevant: true
+      - framework: eu-ai-act
+        control: 'Art. 15'
+        relevant: true

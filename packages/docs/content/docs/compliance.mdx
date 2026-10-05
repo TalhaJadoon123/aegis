@@ -1,0 +1,141 @@
+---
+title: Compliance
+description: What Aegis maps, what it asserts, and what it deliberately refuses to claim.
+---
+
+# Compliance
+
+## What Aegis will not tell you
+
+Aegis does not assert that you are compliant with anything. It reports that
+findings intersect specific controls, and it attaches the control text so a
+qualified assessor can read the evidence side by side.
+
+```
+> This is an automated assessment of technical control evidence produced by
+> Aegis. It is decision support for a qualified assessor. It is not a
+> certification, and it does not attest that the organisation complies with
+> any framework listed.
+```
+
+A scanner that claims compliance is worse than no scanner, because people act on
+the claim.
+
+### Three distinctions the report maintains
+
+**"No findings" is not "pass."**
+Aegis did not find anything. Only an auditor can attest that a control operates
+effectively. The status is labelled `No findings (not attested)` in every
+rendering.
+
+**"Not operating effectively" is reserved.**
+Asserted only for critical findings with concrete evidence attached.
+
+**Limitations are stated, not buried.**
+Every attestation carries them.
+
+## Frameworks and controls
+
+### SOC 2 (AICPA Trust Services Criteria)
+
+| Control | Title |
+|---|---|
+| CC6.1 | Logical access security measures |
+| CC6.6 | Boundary protection |
+| CC6.7 | Restriction of information transmission |
+| CC7.1 | Detection of new vulnerabilities |
+| CC7.2 | Monitoring for anomalies |
+| CC7.3 | Evaluation of security events |
+
+### ISO/IEC 27001:2022 Annex A
+
+`A.5.15` Access control · `A.5.17` Authentication information · `A.8.3`
+Information access restriction · `A.8.6` Capacity management · `A.8.8` Management
+of technical vulnerabilities · `A.8.15` Logging · `A.8.19` Installation of
+software on operational systems · `A.8.20` Networks security · `A.8.26`
+Application security requirements · `A.8.28` Secure coding
+
+### GDPR
+
+`Art. 5` Principles · `Art. 25` Data protection by design · `Art. 30` Records of
+processing · `Art. 32` Security of processing · `Art. 35` DPIA
+
+### EU AI Act (Regulation (EU) 2024/1689)
+
+`Art. 9` Risk management system · `Art. 10` Data and data governance · `Art. 12`
+Record-keeping · `Art. 13` Transparency · `Art. 14` Human oversight · `Art. 15`
+Accuracy, robustness and cybersecurity
+
+### NIST AI RMF 1.0
+
+`GOVERN 1.2` Legal requirements · `GOVERN 4.1` Accountability · `MAP 5.1`
+Impacts identified · `MEASURE 2.7` Security and resilience evaluated · `MANAGE
+2.2` Sustaining value
+
+### OWASP Agentic Security Initiative Top 10
+
+ASI01 Goal Hijacking · ASI02 Tool Misuse · ASI03 Identity and Privilege Abuse ·
+ASI04 Supply Chain · ASI05 Unexpected Code Execution · ASI06 Memory and Context
+Poisoning · ASI07 Insecure Inter-Agent Communication · ASI08 Cascading Failures ·
+ASI09 Human-Agent Trust Exploitation · ASI10 Rogue Agents
+
+### MITRE ATLAS
+
+`AML.T0050` Exploitation for AI System Compromise · `AML.T0051` LLM Prompt
+Injection · `AML.T0054` LLM Jailbreak
+
+## Generating an attestation
+
+```bash
+aegis report . --compliance \
+  --organisation "Acme Inc" \
+  --system "Customer Support Agent" \
+  --owner "security@acme.com" \
+  --format html \
+  --output attestation.html
+```
+
+Markdown works the same way:
+
+```bash
+aegis report . --compliance --organisation "Acme Inc" --format markdown
+```
+
+Framework subset:
+
+```bash
+aegis report . --compliance --framework eu-ai-act --framework gdpr
+```
+
+## What a strong control looks like
+
+The report states what an assessor will expect for each control. For example,
+for EU AI Act Art. 14 (Human oversight):
+
+> Evidence an assessor will expect: Evidence a human can meaningfully intervene,
+> override, or stop the system.
+
+That sentence is the point of the artefact. A finding says "your agent takes
+irreversible actions with no approval gate". The control text says what the
+regulation requires. The evidence expectation says what closes it.
+
+## Interpreting the posture
+
+| Posture | Meaning |
+|---|---|
+| `critical` | At least one control indicated as not operating effectively |
+| `poor` | No critical failure, but three or more controls carry findings |
+| `fair` | No critical failure, one or two controls carry findings |
+| `good` | No findings intersected the assessed controls — **not an attestation** |
+
+## Scope
+
+Aegis assesses **technical** control evidence only. It does not evaluate:
+
+- Organisational or procedural safeguards
+- Physical security
+- Human resource controls
+- Most of what a SOC 2 Type II opinion or ISO certification covers
+
+If your goal is a certification, Aegis produces the technical evidence pack an
+assessor needs. It is not the assessor.

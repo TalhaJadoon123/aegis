@@ -1,0 +1,273 @@
+id: general-code-security
+version: 1.0.0
+name: General Code Security
+description: >-
+  Classic application-security rules that apply with elevated severity inside an
+  agent context, because model output and tool arguments reach these sinks
+  directly.
+
+rules:
+  - id: AEGIS-GEN-001
+    title: Insecure deserialization of untrusted data
+    description: Pickle, marshal, and unsafe YAML deserialization instantiate arbitrary objects and are remote code execution on contact.
+    severity: critical
+    confidence: high
+    languages: ['python']
+    scanners: ['agent', 'repo']
+    cwe: CWE-502
+    patterns:
+      - type: call
+        callee: 'pickle.loads'
+      - type: call
+        callee: 'pickle.load'
+      - type: call
+        callee: 'dill.loads'
+      - type: call
+        callee: 'shelve.open'
+      - type: call
+        callee: 'yaml.load'
+        argsNotContain: ['SafeLoader', 'safe_load']
+      - type: call
+        callee: 'jsonpickle.decode'
+    remediation:
+      title: Use a data-only deserializer
+      description: 'Use `json`, `pydantic`, or `yaml.safe_load`. If a complex object graph is genuinely needed, sign and version the payload.'
+      automated: false
+      effort: low
+    compliance:
+      - framework: soc2
+        control: 'CC6.6'
+        relevant: true
+      - framework: iso27001
+        control: 'A.8.28'
+        relevant: true
+      - framework: owasp-agentic
+        control: ASI05
+        relevant: true
+
+  - id: AEGIS-GEN-002
+    title: SQL query built by string concatenation
+    description: SQL injection. In an agent system the injected value is frequently model output, which an attacker can steer.
+    severity: high
+    confidence: high
+    languages: ['python', 'typescript', 'javascript', 'go']
+    scanners: ['agent', 'repo']
+    cwe: CWE-89
+    patterns:
+      - type: regex
+        pattern: '(?i)(execute|executemany|query|raw|rawQuery)\s*\(\s*f?["''`][^"''`]*(?:SELECT|INSERT|UPDATE|DELETE|DROP)[^"''`]*(\+|%|\$\{|\{)'
+      - type: regex
+        pattern: '(?i)(SELECT|INSERT\s+INTO|UPDATE|DELETE\s+FROM)\s+[^\n;]{0,120}["'']\s*\+\s*\w+'
+      - type: regex
+        pattern: '(?i)(cursor|db|conn)\.execute\s*\(\s*f["\x27][^"\x27]*\{'
+    unless:
+      - '(?i)(\$[0-9]|\?|%s|parameterized|params|bind)'
+    remediation:
+      title: Use parameter binding
+      description: 'Never interpolate values into SQL. Use placeholders and pass values as parameters, including for identifiers selected from an allowlist.'
+      automated: false
+      effort: trivial
+      patch: |
+        # before
+        cursor.execute(f"SELECT * FROM users WHERE email = '{email}'")
+        # after
+        cursor.execute("SELECT * FROM users WHERE email = %s", (email,))
+    compliance:
+      - framework: soc2
+        control: 'CC6.6'
+        relevant: true
+      - framework: iso27001
+        control: 'A.8.28'
+        relevant: true
+      - framework: gdpr
+        control: 'Art. 32'
+        relevant: true
+
+  - id: AEGIS-GEN-003
+    title: XML parser configured without entity-expansion protection
+    description: An external-entity-capable parser (XXE) reads local files and makes outbound requests.
+    severity: high
+    confidence: high
+    scanners: ['repo', 'agent']
+    cwe: CWE-611
+    patterns:
+      - type: regex
+        pattern: '(?i)(resolve_entities|external-general-entities|DOCTYPE\s+\w+\s+SYSTEM)'
+      - type: regex
+        pattern: '(?i)(etree|xml\.etree|lxml|xml\.dom|xml\.sax|XMLParser)\.(parse|fromstring|parseString)\s*\('
+    unless:
+      - '(?i)(defusedxml|resolve_entities\s*=\s*False|no_network|no_external|SAFE|defuse)'
+    remediation:
+      title: Use a hardened XML parser
+      description: Use `defusedxml` in Python, or an equivalent hardened parser, and reject DTDs outright.
+      automated: true
+      effort: trivial
+      patch: |
+        # before
+        from xml.etree import ElementTree
+        ElementTree.fromstring(payload)
+        # after
+        from defusedxml import ElementTree
+        ElementTree.fromstring(payload, forbid_dtd=True)
+    compliance:
+      - framework: soc2
+        control: 'CC6.6'
+        relevant: true
+      - framework: iso27001
+        control: 'A.8.28'
+        relevant: true
+
+  - id: AEGIS-GEN-004
+    title: Path traversal via file read or write
+    description: A filesystem path is composed from untrusted input without normalisation and containment checks.
+    severity: high
+    confidence: high
+    languages: ['python', 'typescript', 'javascript', 'go']
+    scanners: ['repo', 'agent', 'mcp']
+    cwe: CWE-22
+    patterns:
+      - type: regex
+        pattern: '(?i)(path|file|filename)\s*=\s*(os\.path\.join|pathlib\.Path|path\.join|path\.resolve|join)\s*\([^)]*(user|request|params|body|input|query|arg)'
+      - type: regex
+        pattern: '(?i)(send_file|sendFile|static_file|serve_file|X-Sendfile)\s*\([^)]*(user|request|params|body|input)'
+    unless:
+      - '(?i)(resolve\(|realpath|basename|startswith|startsWith|is_relative_to|secure_filename|sanitize|\.\.)'
+    remediation:
+      title: Normalise and contain the path
+      description: 'Resolve the path, then assert it is inside the allowed root. Reject `..`, absolute paths, and NUL bytes before opening.'
+      automated: false
+      effort: low
+    compliance:
+      - framework: soc2
+        control: 'CC6.1'
+        relevant: true
+      - framework: iso27001
+        control: 'A.8.3'
+        relevant: true
+
+  - id: AEGIS-GEN-005
+    title: Overly permissive CORS policy on an API that serves an agent
+    description: `Access-Control-Allow-Origin: *` with credentials, or a reflected origin, lets any page drive an authenticated agent session.
+    severity: high
+    confidence: medium
+    scanners: ['repo', 'agent']
+    cwe: CWE-942
+    patterns:
+      - type: regex
+        pattern: '(?i)(Access-Control-Allow-Origin)["\x27]?\s*[,:]\s*["\x27]?\*'
+      - type: regex
+        pattern: '(?i)origin\s*:\s*(true|req\.headers\.origin|request\.headers\.origin|headers\.get\(["\x27]origin)'
+      - type: regex
+        pattern: '(?i)Access-Control-Allow-Credentials["\x27]?\s*[,:]\s*["\x27]?true'
+      - type: regex
+        pattern: '(?i)cors\s*\(\s*\{\s*origin\s*:\s*true'
+    remediation:
+      title: Restrict CORS to known origins
+      description: 'Use an explicit origin allowlist and never combine a wildcard origin with credentials.'
+      automated: true
+      effort: trivial
+      patch: |
+        // before
+        res.setHeader('Access-Control-Allow-Origin', '*');
+        res.setHeader('Access-Control-Allow-Credentials', 'true');
+        // after
+        const ALLOWED = new Set(['https://app.example.com']);
+        res.setHeader('Access-Control-Allow-Origin', ALLOWED.has(req.headers.origin) ? req.headers.origin : '');
+    compliance:
+      - framework: soc2
+        control: 'CC6.1'
+        relevant: true
+      - framework: iso27001
+        control: 'A.8.20'
+        relevant: true
+
+  - id: AEGIS-GEN-006
+    title: Verbose error or stack trace exposed to the client
+    description: Stack traces, SQL text, and environment values are returned to the caller. In an agent context the stack trace also discloses internal tool wiring.
+    severity: medium
+    confidence: medium
+    scanners: ['repo', 'agent']
+    cwe: CWE-209
+    patterns:
+      - type: regex
+        pattern: '(?i)(traceback\.print_exc|print_exc|stack_trace|err\.stack)[\s\S]{0,120}(res\.(send|json|write)|return|response)'
+      - type: regex
+        pattern: '(?i)(res\.(json|send)\s*\([^)]*str\(e\)|return\s+["''][^"'']*\$\{e\}|detail:\s*(e|err|error)\.message)'
+      - type: regex
+        pattern: '(?i)catch\s*\([^)]*\)\s*\{\s*return\s+[^;]*(e|err|error)\.stack'
+      - type: regex
+        pattern: '(?i)app\.config\[["'']DEBUG["'']\]\s*=\s*True'
+    remediation:
+      title: Log the detail, return a generic message
+      description: 'Return a correlation id to the caller, log the full exception server-side, and keep debug mode off in production.'
+      automated: false
+      effort: trivial
+    compliance:
+      - framework: soc2
+        control: 'CC6.1'
+        relevant: false
+      - framework: iso27001
+        control: 'A.8.15'
+        relevant: false
+
+  - id: AEGIS-GEN-007
+    title: Verification disabled on a security-relevant request
+    description: TLS verification or certificate pinning is disabled for an outbound request that carries agent data.
+    severity: high
+    confidence: confirmed
+    scanners: ['repo', 'agent', 'mcp']
+    cwe: CWE-295
+    patterns:
+      - type: regex
+        pattern: '(?i)verify\s*=\s*False|InsecureSkipVerify\s*:\s*true|rejectUnauthorized\s*:\s*false|NODE_TLS_REJECT_UNAUTHORIZED\s*=\s*["\x27]?0'
+    remediation:
+      title: Restore certificate verification
+      description: 'Install the internal CA bundle instead of disabling verification, and verify the certificate on every call.'
+      automated: true
+      effort: trivial
+    compliance:
+      - framework: soc2
+        control: 'CC6.7'
+        relevant: true
+      - framework: iso27001
+        control: 'A.8.20'
+        relevant: true
+
+  - id: AEGIS-GEN-008
+    title: Unrestricted outbound network access in agent runtime configuration
+    description: >-
+      The agent runtime is configured with unrestricted egress. Without an egress
+      control, exfiltration tooling and SSRF are available to any successful
+      injection.
+    severity: high
+    confidence: medium
+    scanners: ['agent', 'repo']
+    taxonomy: ASI02
+    patterns:
+      - type: jsonpath
+        path: '$.network.egress'
+        operator: 'equals'
+        value: 'allow-all'
+      - type: jsonpath
+        path: '$.sandbox.network_access'
+        operator: 'equals'
+        value: true
+      - type: regex
+        pattern: '(?i)("egress"|"network_access"|"outbound")\s*:\s*("all"|true|"\*"|"allow-all"|"unrestricted")'
+      - type: regex
+        pattern: '(?i)(allow_egress|allowEgress|outbound_allow)\s*[:=]\s*(True|true|\*)'
+    remediation:
+      title: Enforce egress allowlisting at the network layer
+      description: 'Route agent traffic through a logging proxy that resolves DNS, rejects private and metadata ranges, and allows only named destinations.'
+      automated: false
+      effort: medium
+    compliance:
+      - framework: soc2
+        control: 'CC6.6'
+        relevant: true
+      - framework: iso27001
+        control: 'A.8.20'
+        relevant: true
+      - framework: eu-ai-act
+        control: 'Art. 15'
+        relevant: true

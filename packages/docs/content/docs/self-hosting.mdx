@@ -1,0 +1,140 @@
+---
+title: Self-hosting
+description: Run the Aegis dashboard entirely inside your own network.
+---
+
+# Self-hosting
+
+Aegis runs with no external services. The CLI, the engine, and the dashboard
+have **zero runtime npm dependencies** and make no outbound requests unless you
+explicitly ask them to.
+
+This is the deployment that matters for most enterprise evaluations: inside a
+customer network, frequently air-gapped.
+
+## Requirements
+
+Node 22 or later. Nothing else.
+
+## Running the dashboard
+
+```bash
+# Produce scan exports
+aegis scan . --format json --output .aegis/dashboard/scan.json
+
+# Serve
+node packages/web/src/bin.mts --data .aegis/dashboard --port 8080
+```
+
+The dashboard reads JSON exports from the data directory. It has no database.
+
+## Authentication
+
+```bash
+export AEGIS_DASHBOARD_TOKEN="a-long-random-string"
+node packages/web/src/bin.mts --data .aegis/dashboard
+```
+
+When a token is set, every `/api/*` route requires `Authorization: Bearer
+<token>`.
+
+When **no** token is set the server binds to `127.0.0.1` only. This is
+deliberate: the dashboard renders scan evidence, including file paths and code
+snippets. Aegis will not expose that on a network interface by accident.
+
+To expose it deliberately, set a token and bind explicitly:
+
+```bash
+AEGIS_DASHBOARD_TOKEN="$(openssl rand -hex 32)" \
+node packages/web/src/bin.mts --data .aegis/dashboard --host 10.0.0.5
+```
+
+Put a TLS-terminating reverse proxy in front of it. The token travels in a
+header and must not cross plaintext.
+
+## API
+
+| Route | Returns |
+|---|---|
+| `GET /api/scans` | Every scan, newest first |
+| `GET /api/scans/:id` | One scan with findings and artifacts |
+| `GET /api/trends` | Score-over-time series and deltas |
+| `GET /healthz` | `{ ok: true, scans: N }` |
+
+Response headers include a restrictive `Content-Security-Policy`,
+`X-Content-Type-Options: nosniff`, and `Cache-Control: no-store`.
+
+## Container
+
+```bash
+docker build -f infra/sandbox/Dockerfile -t aegis .
+docker run --rm \
+  -v "$PWD:/workspace" \
+  -v "$PWD/.aegis:/workspace/.aegis" \
+  aegis scan /workspace
+```
+
+The image drops all capabilities, runs as a non-root user, mounts the workspace
+read-only by default, and sets `no-new-privileges`.
+
+## Systemd
+
+```ini
+[Unit]
+Description=Aegis security scanner
+After=network.target
+
+[Service]
+Type=oneshot
+User=aegis
+WorkingDirectory=/opt/aegis
+ExecStart=/usr/bin/node packages/cli/src/bin.ts scan /srv/agents --format sarif --output /var/lib/aegis/latest.sarif
+```
+
+## Air-gapped use
+
+Everything works with no network:
+
+```bash
+# Static analysis — no network
+aegis scan . --no-connect --no-spawn
+
+# Red team dry-run — no requests sent
+aegis redteam --dry-run
+
+# Bundled attack graph only
+aegis intel --offline
+```
+
+Live MCP introspection and real red teaming need network access to the target
+system, but never to anything outside it.
+
+## Why no database
+
+Scan history is JSON files in a directory. This means:
+
+- No migrations
+- No database to secure or patch
+- Backups are `tar`
+- The data is inspectable with `cat` and `jq`
+- Nothing to lose in an incident
+
+If you need multi-tenancy or long-term storage, point a job at the JSON
+directory and ingest into whatever you already run. Aegis does not require you
+to adopt a datastore.
+
+## Upgrading
+
+```bash
+git pull
+node packages/cli/src/bin.ts --version
+```
+
+Rule packs are data. To keep a fork of the rules across upgrades, point at
+your copy:
+
+```bash
+aegis scan . --rule-dir ./acme-rules
+```
+
+Rules are CC0, so forking is unrestricted by design.

@@ -1,0 +1,56 @@
+name: 'Aegis Security Scan'
+description: >-
+  Scan MCP servers, agent code and runtime behaviour. Uploads SARIF to code
+  scanning, comments findings on the PR, and fails the build at your chosen
+  severity threshold.
+author: 'Aegis Security'
+branding:
+  icon: 'shield'
+  color: 'blue-purple'
+
+inputs:
+  path:
+    description: 'Path to scan (agent codebase, repository, or MCP config directory).'
+    required: false
+    default: '.'
+  format:
+    description: 'Report format for the written artefact.'
+    required: false
+    default: 'sarif'
+  output:
+    description: 'Where to write the report.'
+    required: false
+    default: 'aegis.sarif'
+  min-severity:
+    description: 'Lowest severity to include (critical|high|medium|low|info).'
+    required: false
+    default: 'low'
+  fail-on:
+    description: 'Fail the build at or above this severity.'
+    required: false
+    default: 'high'
+  rule-dir:
+    description: 'Directory containing custom Aegis rule packs.'
+    required: false
+  comment:
+    description: 'Post a findings summary as a PR comment.'
+    required: false
+    default: 'false'
+  upload:
+    description: 'Push results to the hosted Aegis dashboard (requires AEGIS_API_KEY).'
+    required: false
+    default: 'false'
+
+outputs:
+  sarif-path:
+    description: 'Path to the generated SARIF file.'
+  exit-code:
+    description: 'The scanner exit code (1 when the threshold was crossed).'
+
+runs:
+  using: 'node20'
+  main: 'dist/index.js'
+
+branding-note: >-
+  The action bundles no third-party dependencies: it shells out to the Aegis
+  engine directly, so running it introduces no npm supply-chain surface.

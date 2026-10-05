@@ -1,0 +1,279 @@
+# Aegis CLI Reference
+
+```
+aegis <command> [target] [options]
+```
+
+Exit codes: `0` success · `1` threshold crossed · `2` usage error.
+
+---
+
+## Global options
+
+| Option | Default | Description |
+|---|---|---|
+| `-h, --help` | — | Show help for the command |
+| `-v, --version` | — | Print the version |
+| `-f, --format <fmt>` | `text` | `text`, `json`, `jsonl`, `sarif`, `markdown`, `html`, `csv` |
+| `-o, --output <path>` | stdout | Write output to a file |
+| `-q, --quiet` | `false` | Suppress progress output |
+| `--no-color` | `false` | Disable ANSI colour |
+| `-c, --config <path>` | — | Path to `aegis.config.json` |
+
+---
+
+## `aegis scan` — scan MCP servers, agent code, repositories
+
+```
+aegis scan [path] [options]
+```
+
+| Option | Default | Description |
+|---|---|---|
+| `--min-severity <sev>` | `low` | Lowest severity to report |
+| `--rules <paths>` | — | Extra rule pack files (comma-separated) |
+| `--rule-dir <path>` | — | Directory of custom rule packs |
+| `-l, --limit <n>` | all | Max findings to print |
+| `--fail-on <sev>` | `high` | Exit non-zero at or above this severity |
+| `--no-connect` | `false` | Do not connect to MCP servers |
+| `--no-spawn` | `false` | Do not spawn MCP server processes |
+| `--include-processes` | `false` | Discover running MCP servers |
+| `--exclude <names>` | — | Exclude MCP servers by name |
+| `--threat-model` | `true` | Generate a threat model |
+| `--graph` | `false` | Render the supply chain graph as HTML |
+| `--baseline` | `false` | Only report findings not in the baseline |
+| `--baseline-file <path>` | `.aegis/baseline.json` | Baseline fingerprints |
+
+The scan runs both the agent-code scanner and the MCP scanner. It looks for
+`mcp.json`, `.mcp.json`, `.cursor/mcp.json` in the target directory, and
+discovers servers from Claude Desktop, Cursor, VS Code, Windsurf, and Zed
+config locations.
+
+### Examples
+
+```bash
+# Human-readable
+aegis scan .
+
+# CI: SARIF for code scanning, fail on high
+aegis scan . --format sarif --output aegis.sarif --fail-on high
+
+# Config-only MCP audit (does not start any server)
+aegis scan . --no-connect --no-spawn
+
+# Include servers currently running on this machine
+aegis scan . --include-processes
+
+# Only new findings
+aegis scan . --baseline --baseline-file .aegis/baseline.json
+
+# Render the supply chain graph
+aegis scan . --graph
+```
+
+---
+
+## `aegis redteam` — evolutionary red team
+
+```
+aegis redteam --target <url|config-path> [options]
+aegis redteam --command <cmd> [options]
+aegis redteam --dry-run
+```
+
+| Option | Default | Description |
+|---|---|---|
+| `--target <spec>` | — | `http(s)://` URL, MCP config path, or `dry-run` |
+| `--command <cmd>` | — | Local agent script to attack |
+| `--dry-run` | `false` | Make no requests; use canned responses |
+| `--sandbox` | `false` | Run attacks inside an isolated container |
+| `--attack <ids>` | — | Specific attack ids (comma-separated) |
+| `--category <names>` | — | Attack categories |
+| `--population <n>` | `12` | Population size |
+| `--generations <n>` | `6` | Generations to evolve |
+| `--budget <n>` | `200` | Max target requests |
+| `--seed <n>` | `1337` | PRNG seed, for reproducibility |
+| `--timeout <ms>` | `30000` | Per-request timeout |
+| `--redact-prompts` | `false` | Omit verbatim attack prompts |
+| `--header <k:v>` | — | Extra HTTP header (repeatable) |
+
+Exit code `1` when attack success rate exceeds 10%.
+
+### Attack categories
+
+`prompt-injection` · `jailbreak` · `tool-abuse` · `data-exfiltration` ·
+`denial-of-service` · `supply-chain`
+
+```bash
+# No requests sent — validate configuration first
+aegis redteam --dry-run
+
+# Against a local HTTP agent
+aegis redteam --target http://localhost:8000/agent --budget 100
+
+# Only prompt injection, sharing it with a colleague
+aegis redteam --target http://localhost:8000 --category prompt-injection \
+  --redact-prompts --format markdown
+
+# Reproduce a past run exactly
+aegis redteam --target http://localhost:8000 --seed 2026
+
+# Attack a local agent script
+aegis redteam --command "python agent.py"
+```
+
+**Reproducibility.** The seed plus the budget fully determine the run. A
+report records both, so a finding can be re-verified later.
+
+---
+
+## `aegis sandbox` — observe runtime behaviour
+
+```
+aegis sandbox --command <cmd> [cwd] [options]
+```
+
+| Option | Default | Description |
+|---|---|---|
+| `--shadow` | `false` | Predict actions without executing them |
+| `--timeout <ms>` | `60000` | Timeout |
+| `--max-bytes <n>` | `1048576` | Max recorded bytes per stream |
+| `--baseline <path>` | — | Baseline fingerprint to compare against |
+
+The sandbox instruments the agent's tool boundary — the layer where an agent's
+actions are actually expressed. It records every tool call, network request,
+file access, and process spawn, computes a behavioural fingerprint, and enforces
+agent policies.
+
+The instrumented agent emits JSON lines on stdout:
+
+```json
+{"type":"tool_call","tool":"read_file","arguments":{"path":"~/.ssh/id_rsa"}}
+{"type":"file_read","path":"/etc/passwd"}
+{"type":"http_request","url":"http://169.254.169.254/latest/meta-data/"}
+```
+
+Default policies block reads of `/etc/passwd`, `/etc/shadow`, `.ssh`, `.env`,
+`.aws`, and requests to cloud metadata endpoints.
+
+**Shadow mode** evaluates the same policies but performs no action — it answers
+"what would this agent do with this input?" without creating the risk of asking.
+
+---
+
+## `aegis fix` — remediations
+
+```
+aegis fix [path] [options]
+```
+
+| Option | Default | Description |
+|---|---|---|
+| `--apply` | `false` | Write changes to disk |
+| `--rule <ids>` | — | Only remediate these rules |
+| `--max-severity <sev>` | `critical` | Highest severity to fix |
+| `--branch` | `false` | Create a git branch and commit |
+| `--pr` | `false` | Open a pull request |
+
+Without `--apply` this is a read-only plan: what would change, what would be
+proposed, and what cannot be automated.
+
+---
+
+## `aegis report` — compliance attestation
+
+```
+aegis report [path] [options]
+```
+
+| Option | Default | Description |
+|---|---|---|
+| `--compliance` | `false` | Emit a compliance attestation |
+| `--organisation <name>` | — | Organisation name |
+| `--system <name>` | — | System name |
+| `--owner <name>` | — | Control owner |
+| `--framework <names>` | all | Frameworks to assess |
+
+Frameworks: `soc2` · `iso27001` · `gdpr` · `eu-ai-act` · `nist-ai-rmf` ·
+`owasp-agentic` · `mitre-atlas`
+
+```bash
+# Executive summary + technical report
+aegis report . --format markdown --output report.md
+
+# Attestation for an auditor, as HTML
+aegis report . --compliance --organisation "Acme Inc" \
+  --system "Customer Support Agent" --format html --output attestation.html
+
+# EU AI Act only
+aegis report . --compliance --framework eu-ai-act --framework gdpr
+```
+
+---
+
+## `aegis intel` — living attack graph
+
+```
+aegis intel [options]
+```
+
+| Option | Description |
+|---|---|
+| `--exposure` | Show exposure to known attacks |
+| `--capability <names>` | Declare capabilities for exposure analysis |
+| `--technique <id>` | Explain a specific technique |
+| `--alerts` | List alerts matching the graph |
+| `--watch` | Poll feeds for new techniques |
+| `--offline` | Use only the bundled graph |
+
+---
+
+## Configuration file
+
+`aegis.config.json` in the target directory:
+
+```json
+{
+  "ignore": ["**/node_modules/**", "**/.venv/**"],
+  "severityFloor": "medium",
+  "failOn": "critical",
+  "mcp": {
+    "exclude": ["local-dev-server"],
+    "connect": false
+  },
+  "redteam": {
+    "seed": 2026,
+    "budget": 300
+  }
+}
+```
+
+## Extending with plugins
+
+```ts
+import type { AegisPlugin } from '@aegis/core';
+
+export const myPlugin: AegisPlugin = {
+  name: 'acme-rules',
+  version: '1.0.0',
+  capabilities: { filesystem: false, network: false, spawn: false },
+  rulePacks: [{
+    id: 'acme-internal',
+    version: '1.0.0',
+    name: 'Acme internal rules',
+    rules: [{
+      id: 'ACME-001',
+      title: 'Internal data must not reach an external model',
+      description: 'Company data must not be sent to third-party inference providers.',
+      severity: 'high',
+      patterns: [{ type: 'call', callee: 'openai.ChatCompletion.create' }],
+      remediation: {
+        title: 'Use the internal gateway',
+        description: 'Route inference through gw.internal.acme/v1.',
+        automated: false
+      },
+      compliance: [{ framework: 'gdpr', control: 'Art. 44', relevant: true }]
+    }]
+  }]
+};
+```

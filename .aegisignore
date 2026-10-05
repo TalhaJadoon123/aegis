@@ -14,6 +14,21 @@ docs/
 packages/core/test/fixtures/
 packages/rules/.aegisignore
 
+# Aegis's own attack corpus.
+#
+# These files exist to *contain* attack strings: the rule definitions that
+# detect them, the templates the red teamer mutates, the seed graph, and the
+# synthetic credentials the tests inject. Flagging them is a true positive
+# about the file and a false positive about the system, and a scanner whose own
+# corpus lights up red is one nobody will act on.
+#
+# Scanned explicitly with:
+#   aegis scan packages/core/src/redteam --rule-dir packages/rules/rules
+packages/core/src/redteam/
+packages/core/src/intel/seed.ts
+packages/core/scripts/demo-redteam.mts
+packages/core/test/synthetic-secrets.ts
+
 # Generated artefacts
 *.sarif
 aegis-report.*

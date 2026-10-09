@@ -27,7 +27,7 @@ function check(name, ok, detail = '') {
 }
 
 function run(args, opts = {}) {
-  const r = spawnSync(process.execPath, ['--import', HOOK, BIN, ...args], {
+  const r = spawnSync(process.execPath, ['--experimental-strip-types', '--import', HOOK, BIN, ...args], {
     cwd: ROOT,
     encoding: 'utf8',
     timeout: opts.timeout ?? 120000,

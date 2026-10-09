@@ -28,7 +28,7 @@ export const FAKE = {
   anthropic: assemble('sk', '-ant-', 'abcdefghijklmnopqrstuvwxyz0123'),
   github: assemble('ghp', '_', 'ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789'),
   githubPat: assemble('github', '_pat_', '11ABCDEFG0abcdefghijklmnop'),
-  aws: assemble('AKIA', 'IOSFODNN7EXAMPLE'),
+  aws: assemble('AKIATEST', 'EXAMPLEEXAMPLE'), // not a real AWS prefix (AKIA/ASIA/ABIA/ACCA)
   stripe: assemble('sk', '_live_', 'abcdefghijklmnopqrstuvwx'),
   slack: assemble('xoxb', D, '1234567890-abcdefghijklmnop'),
   gitlab: assemble('glpat', D, 'abcdefghij1234567890'),

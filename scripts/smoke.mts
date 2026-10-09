@@ -20,7 +20,7 @@ const FIXTURE = join(ROOT, 'packages', 'core', 'test', 'fixtures', 'vulnerable-a
 
 function run(args: string[]): Promise<{ code: number; out: string; err: string }> {
   return new Promise((r) => {
-    const c = spawn(process.execPath, ['--import', HOOK, BIN, ...args], { shell: false, windowsHide: true });
+    const c = spawn(process.execPath, ['--experimental-strip-types', '--import', HOOK, BIN, ...args], { shell: false, windowsHide: true });
     let out = '';
     let err = '';
     c.stdout.on('data', (d) => { out += d; });

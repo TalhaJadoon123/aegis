@@ -51,7 +51,7 @@ transitive packages to read its own command line has a supply-chain problem,
 and if you are deploying this into a customer network you already know it.
 
 ```bash
-git clone https://github.com/aegis-security/aegis
+git clone https://github.com/TalhaJadoon123/aegis
 cd aegis
 
 # Node 22+ only. Nothing to install.
@@ -300,7 +300,7 @@ the scan, the fix is refused as stale rather than applied blind.
 ## In CI
 
 ```yaml
-- uses: aegis-security/aegis@v1
+- uses: TalhaJadoon123/aegis@v1
   with:
     path: .
     format: sarif

@@ -90,11 +90,11 @@ describe('framework detection', () => {
 
 describe('secret detection', () => {
   test('finds provider keys and never echoes the value', () => {
-    const content = 'OPENAI_API_KEY = "sk-proj-abcdefghijklmnopqrstuvwxyz0123456789"';
+    const content = `OPENAI_API_KEY = "${FAKE.openai}"`;
     const found = scanSecrets('agent.py', content);
     assert.equal(found.length, 1);
     assert.equal(found[0]!.kind, 'openai-api-key');
-    assert.ok(!JSON.stringify(found[0]).includes('abcdefghijklmnopqrstuvwxyz'));
+    assert.ok(!JSON.stringify(found[0]).includes(FAKE.openai));
     assert.ok(found[0]!.redacted.includes('*'));
   });
 
@@ -125,9 +125,9 @@ describe('secret detection', () => {
   });
 
   test('redaction preserves only a short prefix and suffix', () => {
-    const redacted = redact('sk-proj-abcdefghijklmnopqrstuvwxyz');
+    const redacted = redact(FAKE.openai);
     assert.ok(redacted.startsWith('sk-p'));
-    assert.ok(redacted.endsWith('wxyz'));
+    assert.ok(redacted.endsWith('6789'));
     assert.ok(!redacted.includes('abcdefghij'));
   });
 });

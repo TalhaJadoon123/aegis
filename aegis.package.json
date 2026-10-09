@@ -8,10 +8,10 @@
   "homepage": "https://aegis.dev",
   "repository": {
     "type": "git",
-    "url": "git+https://github.com/aegis-security/aegis.git"
+    "url": "git+https://github.com/TalhaJadoon123/aegis.git"
   },
   "bugs": {
-    "url": "https://github.com/aegis-security/aegis/issues"
+    "url": "https://github.com/TalhaJadoon123/aegis/issues"
   },
   "keywords": [
     "ai-security",

@@ -5,6 +5,7 @@ import { dirname, join, resolve } from 'node:path';
 import { fileURLToPath, pathToFileURL } from 'node:url';
 import { mkdtemp, writeFile, readFile, rm } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
+import { FAKE } from './synthetic-secrets.js';
 
 const here = dirname(fileURLToPath(import.meta.url));
 const ROOT = resolve(here, '..', '..', '..');
@@ -159,11 +160,11 @@ describe('CLI: scan', () => {
         '--format', format, '--no-connect', '--no-color',
       ]);
       assert.ok(
-        !r.stdout.includes('sk-proj-abcdefghijklmnopqrstuvwxyz'),
+        !r.stdout.includes(FAKE.openai),
         `${format} leaked the raw API key`,
       );
       assert.ok(
-        !r.stdout.includes('ghp_ABCDEFGHIJKLMNOPQRSTUVWXYZ'),
+        !r.stdout.includes(FAKE.github),
         `${format} leaked the raw GitHub token`,
       );
     }
@@ -305,7 +306,7 @@ describe('CLI: fix', () => {
   test('produces a plan without writing files by default', async () => {
     const dir = await mkdtemp(join(tmpdir(), 'aegis-fix-'));
     try {
-      const code = 'OPENAI_API_KEY = "sk-proj-abcdefghijklmnopqrstuvwxyz0123456789"\nprint(OPENAI_API_KEY)\n';
+      const code = `OPENAI_API_KEY = "${FAKE.openai}"\nprint(OPENAI_API_KEY)\n`;
       await writeFile(join(dir, 'agent.py'), code);
       const before = await readFile(join(dir, 'agent.py'), 'utf8');
 
@@ -324,12 +325,12 @@ describe('CLI: fix', () => {
     const dir = await mkdtemp(join(tmpdir(), 'aegis-fix-apply-'));
     try {
       const path = join(dir, 'agent.py');
-      await writeFile(path, 'OPENAI_API_KEY = "sk-proj-abcdefghijklmnopqrstuvwxyz0123456789"\n');
+      await writeFile(path, `OPENAI_API_KEY = "${FAKE.openai}"\n`);
 
       await aegis(['fix', dir, '--no-connect', '--max-severity', 'low', '--apply']);
       const patched = await readFile(path, 'utf8');
       assert.ok(patched.includes('os.environ'), 'expected the key moved to the environment');
-      assert.ok(!patched.includes('sk-proj-abcdefghijklmnopqrstuvwxyz'), 'secret still present');
+      assert.ok(!patched.includes(FAKE.openai), 'secret still present');
 
       // Re-scan to confirm the fix actually resolved the finding.
       const rescan = await aegis(['scan', dir, '--format', 'json', '--no-connect']);

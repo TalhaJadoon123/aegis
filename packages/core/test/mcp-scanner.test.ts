@@ -12,6 +12,7 @@ import { PluginRegistry } from '../src/registry.js';
 import { silentLogger } from '../src/logger.js';
 import type { DiscoveredMcpServer } from '../src/scanners/mcp/discovery.js';
 import type { McpIntrospection, McpTool } from '../src/scanners/mcp/protocol.js';
+import { FAKE } from './synthetic-secrets.js';
 
 const here = dirname(fileURLToPath(import.meta.url));
 const SERVER = join(here, 'fixtures', 'mcp-servers', 'vulnerable-server.mjs');
@@ -192,11 +193,11 @@ describe('MCP config analysis', () => {
 
   test('flags an inline secret and never echoes it', () => {
     const findings = analyzeMcpConfig(
-      server({ command: 'node', env: { GITHUB_TOKEN: 'ghp_abcdefghijklmnopqrstuvwxyz012345' } }),
+      server({ command: 'node', env: { GITHUB_TOKEN: FAKE.github } }),
     );
     const secret = findings.find((f) => f.ruleId === 'AEGIS-MCP-032');
     assert.ok(secret);
-    assert.ok(!JSON.stringify(secret).includes('abcdefghijklmnopqrstuvwxyz012345'));
+    assert.ok(!JSON.stringify(secret).includes(FAKE.github));
   });
 
   test('does not flag an env-var reference as a secret', () => {

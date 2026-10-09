@@ -51,6 +51,7 @@ const started = Date.now();
 const result = spawnSync(
   process.execPath,
   [
+    '--experimental-strip-types',
     '--import', HOOK,
     '--test',
     // Serial execution: several suites spawn child processes or bind sockets,

@@ -1,0 +1,4 @@
+test(e2e): add --experimental-strip-types flag to spawned CLI process
+
+E2E tests spawn the CLI as a subprocess and need the flag for Node 22
+native type stripping to work.

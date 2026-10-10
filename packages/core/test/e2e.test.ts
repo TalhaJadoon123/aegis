@@ -35,7 +35,7 @@ interface RunResult {
 
 function aegis(args: readonly string[], cwd = ROOT): Promise<RunResult> {
   return new Promise((resolvePromise) => {
-    const child = spawn(process.execPath, ['--import', HOOK, BIN_REL, ...args], {
+    const child = spawn(process.execPath, ['--experimental-strip-types', '--import', HOOK, BIN_REL, ...args], {
       cwd,
       shell: false,
       windowsHide: true,

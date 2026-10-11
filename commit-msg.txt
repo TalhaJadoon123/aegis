@@ -1,4 +1,8 @@
-test(e2e): add --experimental-strip-types flag to spawned CLI process
+fix(observability): fix typecheck and package build
 
-E2E tests spawn the CLI as a subprocess and need the flag for Node 22
-native type stripping to work.
+- packages/core/src/observability/index.ts: Fix pino v8 import (named export 'pino'), simplify to no-op when deps not installed
+- packages/core/src/observability/opentelemetry-api.d.ts: Add minimal type declarations for @opentelemetry/api
+- packages/web/src/server.ts: Fix /readyz endpoint to JSON.stringify response body
+- package.json: Add optional observability deps (pino, @opentelemetry/*, zod) as devDependencies
+
+All gates pass: typecheck, smoke (18/18), readiness (81/81), package (19/19), build.

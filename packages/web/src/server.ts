@@ -135,17 +135,17 @@ export class Dashboard {
       // Readiness probe: checks if data directory is accessible and server can serve requests
       try {
         const scans = await this.listScans();
-        send(res, 200, 'application/json', {
+        send(res, 200, 'application/json', JSON.stringify({
           ready: true,
           scans: scans.length,
           timestamp: new Date().toISOString(),
-        });
+        }));
       } catch (error) {
-        send(res, 503, 'application/json', {
+        send(res, 503, 'application/json', JSON.stringify({
           ready: false,
           error: (error as Error).message,
           timestamp: new Date().toISOString(),
-        });
+        }));
       }
       return;
     }

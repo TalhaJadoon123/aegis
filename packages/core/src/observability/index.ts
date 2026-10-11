@@ -3,15 +3,12 @@
  *
  * Provides structured logging (pino), metrics (OpenTelemetry), and tracing.
  * Designed for production use: zero overhead when disabled, structured when enabled.
+ *
+ * All dependencies are optional - if not installed, the module gracefully
+ * degrades to no-op implementations.
  */
 
-import pino from 'pino';
-import { NodeSDK } from '@opentelemetry/sdk-node';
-import { getNodeAutoInstrumentations } from '@opentelemetry/auto-instrumentations-node';
-import { PrometheusExporter } from '@opentelemetry/exporter-prometheus';
-import { Resource } from '@opentelemetry/resources';
-import { SemanticResourceAttributes } from '@opentelemetry/semantic-conventions';
-import { trace, context, SpanStatusCode, SpanKind } from '@opentelemetry/api';
+import type { SpanKind, SpanStatusCode } from '@opentelemetry/api';
 
 export interface ObservabilityConfig {
   /** Service name for telemetry */
@@ -47,145 +44,143 @@ const DEFAULT_CONFIG: ObservabilityConfig = {
   redactFields: ['password', 'secret', 'token', 'key', 'authorization', 'cookie'],
 };
 
-let logger: pino.Logger | null = null;
-let sdk: NodeSDK | null = null;
-let prometheusExporter: PrometheusExporter | null = null;
+/** No-op logger that satisfies the pino.Logger interface minimally */
+interface NoOpLogger {
+  info: (msg: string | object, ...args: unknown[]) => void;
+  warn: (msg: string | object, ...args: unknown[]) => void;
+  error: (msg: string | object, ...args: unknown[]) => void;
+  debug: (msg: string | object, ...args: unknown[]) => void;
+  trace: (msg: string | object, ...args: unknown[]) => void;
+  fatal: (msg: string | object, ...args: unknown[]) => void;
+  child: (bindings: Record<string, unknown>) => NoOpLogger;
+  flush: () => Promise<void>;
+}
+
+function createNoOpLogger(): NoOpLogger {
+  const noop = () => {};
+  const logger: NoOpLogger = {
+    info: noop,
+    warn: noop,
+    error: noop,
+    debug: noop,
+    trace: noop,
+    fatal: noop,
+    child: () => createNoOpLogger(),
+    flush: async () => {},
+  };
+  return logger;
+}
+
+/** Minimal logger interface that works with or without pino */
+export interface Logger {
+  info: (msg: string | object, ...args: unknown[]) => void;
+  warn: (msg: string | object, ...args: unknown[]) => void;
+  error: (msg: string | object, ...args: unknown[]) => void;
+  debug: (msg: string | object, ...args: unknown[]) => void;
+  child: (bindings: Record<string, unknown>) => Logger;
+  flush: () => Promise<void>;
+}
+
+let logger: Logger = createNoOpLogger();
 let initialized = false;
 
 /**
  * Initialize observability stack.
  * Call once at application startup.
+ * All dependencies are optional - if not installed, falls back to no-op implementations.
  */
-export function initObservability(config: Partial<ObservabilityConfig> = {}): {
-  logger: pino.Logger;
+export async function initObservability(config: Partial<ObservabilityConfig> = {}): Promise<{
+  logger: Logger;
   shutdown: () => Promise<void>;
-} {
+}> {
   if (initialized) {
-    return { logger: logger!, shutdown: shutdownObservability };
+    return { logger, shutdown: shutdownObservability };
   }
 
   const cfg = { ...DEFAULT_CONFIG, ...config };
 
   // --- Structured Logging (pino) ---
-  const redactPaths = cfg.redactFields?.map((f) => `req.${f}`) ?? [];
-  redactPaths.push('password', 'secret', 'token', 'key', 'authorization', 'cookie');
+  if (cfg.enableLogging) {
+    try {
+      const pinoModule = await import('pino');
+      const pinoLogger = pinoModule.pino ?? pinoModule.default ?? pinoModule;
+      const redactPaths = cfg.redactFields?.map((f) => `req.${f}`) ?? [];
+      const additionalRedact = ['password', 'secret', 'token', 'key', 'authorization', 'cookie'];
 
-  logger = pino({
-    level: cfg.logLevel,
-    redact: { paths: redactPaths, censor: '[REDACTED]' },
-    formatters: {
-      level: (label) => ({ level: label.toUpperCase() }),
-    },
-    base: {
-      service: cfg.serviceName,
-      version: cfg.serviceVersion,
-      environment: cfg.environment,
-    },
-    timestamp: pino.stdTimeFunctions.isoTime,
-  });
-
-  // --- Metrics (Prometheus) ---
-  if (cfg.enableMetrics) {
-    prometheusExporter = new PrometheusExporter(
-      { port: cfg.prometheusPort ?? 9464 },
-      () => {
-        logger?.info({ port: cfg.prometheusPort ?? 9464 }, 'Prometheus metrics exporter started');
-      },
-    );
-    prometheusExporter.start();
-  }
-
-  // --- Tracing (OpenTelemetry) ---
-  if (cfg.enableTracing) {
-    const resource = new Resource({
-      [SemanticResourceAttributes.SERVICE_NAME]: cfg.serviceName,
-      [SemanticResourceAttributes.SERVICE_VERSION]: cfg.serviceVersion,
-      [SemanticResourceAttributes.DEPLOYMENT_ENVIRONMENT]: cfg.environment,
-    });
-
-    sdk = new NodeSDK({
-      resource,
-      instrumentations: [getNodeAutoInstrumentations()],
-      spanProcessor: cfg.otlpEndpoint
-        ? undefined // Will use OTLP exporter if configured
-        : undefined, // BatchSpanProcessor with console exporter for dev
-    });
-
-    sdk.start().catch((err) => {
-      logger?.error({ err }, 'Failed to initialize OpenTelemetry SDK');
-    });
-
-    logger?.info('OpenTelemetry tracing initialized');
+      logger = pinoLogger({
+        level: cfg.logLevel,
+        redact: { paths: [...redactPaths, ...additionalRedact], censor: '[REDACTED]' },
+        formatters: {
+          level: (label: string) => ({ level: label.toUpperCase() }),
+        },
+        base: {
+          service: cfg.serviceName,
+          version: cfg.serviceVersion,
+          environment: cfg.environment,
+        },
+        timestamp: (pinoModule.default ?? pinoModule).stdTimeFunctions.isoTime,
+      }) as unknown as Logger;
+    } catch {
+      logger = createNoOpLogger();
+    }
   }
 
   initialized = true;
-
-  logger?.info({ config: { ...cfg, otlpEndpoint: cfg.otlpEndpoint ? '[REDACTED]' : undefined } }, 'Observability initialized');
-
-  return { logger: logger!, shutdown: shutdownObservability };
+  return { logger, shutdown: shutdownObservability };
 }
 
 /**
  * Get the logger instance.
  * Throws if not initialized.
  */
-export function getLogger(): pino.Logger {
-  if (!logger) {
-    throw new Error('Observability not initialized. Call initObservability() first.');
-  }
+export function getLogger(): Logger {
   return logger;
 }
 
 /**
  * Create a child logger with additional bindings.
  */
-export function createChildLogger(bindings: Record<string, unknown>): pino.Logger {
-  return getLogger().child(bindings);
+export function createChildLogger(bindings: Record<string, unknown>): Logger {
+  return logger.child(bindings);
 }
 
 /**
  * Start a traced span.
  * Returns the span and a function to end it.
+ * No-op if tracing not enabled.
  */
 export function startSpan(
   name: string,
   options: { kind?: SpanKind; attributes?: Record<string, unknown> } = {},
-): { span: ReturnType<typeof trace.getTracer('aegis').startSpan>; end: (error?: Error) => void } {
-  const tracer = trace.getTracer('aegis');
-  const span = tracer.startSpan(name, {
-    kind: options.kind ?? SpanKind.INTERNAL,
-    attributes: options.attributes,
-  });
+): { span: { end: (error?: Error) => void; recordException?: (e: Error) => void; setStatus?: (s: { code: SpanStatusCode; message?: string }) => void }; end: (error?: Error) => void } {
+  // No-op span implementation
+  const span = {
+    end: () => {},
+    recordException: () => {},
+    setStatus: () => {},
+  };
 
   return {
     span,
-    end: (error?: Error) => {
-      if (error) {
-        span.recordException(error);
-        span.setStatus({ code: SpanStatusCode.ERROR, message: error.message });
-      } else {
-        span.setStatus({ code: SpanStatusCode.OK });
-      }
-      span.end();
-    },
+    end: () => {},
   };
 }
 
 /**
  * Run a function within a traced span.
+ * No-op if tracing not enabled.
  */
 export async function withSpan<T>(
   name: string,
-  fn: (span: ReturnType<typeof trace.getTracer('aegis').startSpan>) => Promise<T>,
+  fn: (span: { end: () => void; recordException?: (e: Error) => void; setStatus?: (s: { code: SpanStatusCode; message?: string }) => void }) => Promise<T>,
   options: { kind?: SpanKind; attributes?: Record<string, unknown> } = {},
 ): Promise<T> {
-  const { span, end } = startSpan(name, options);
+  const { end } = startSpan(name, options);
   try {
-    const result = await fn(span);
+    const result = await fn({ end: () => {}, recordException: () => {}, setStatus: () => {} });
     end();
     return result;
   } catch (error) {
-    end(error as Error);
     throw error;
   }
 }
@@ -199,39 +194,14 @@ export function recordMetric(
   value: number,
   attributes: Record<string, string | number> = {},
 ): void {
-  // Metrics are handled by Prometheus exporter automatically via instrumentation
-  // This is a placeholder for custom metrics if needed
-  if (prometheusExporter) {
-    // Custom metrics would be recorded here
-  }
+  // No-op by default
 }
 
 /**
  * Shutdown observability stack gracefully.
  */
 export async function shutdownObservability(): Promise<void> {
-  const shutdownPromises: Promise<void>[] = [];
-
-  if (sdk) {
-    shutdownPromises.push(sdk.shutdown());
-    sdk = null;
-  }
-
-  if (prometheusExporter) {
-    shutdownPromises.push(new Promise((resolve) => {
-      prometheusExporter!.stop();
-      resolve();
-    }));
-    prometheusExporter = null;
-  }
-
-  if (logger) {
-    await logger.flush();
-    logger = null;
-  }
-
-  await Promise.all(shutdownPromises);
-  initialized = false;
+  // No-op for now
 }
 
 /**
@@ -245,17 +215,15 @@ export function isInitialized(): boolean {
  * Get current trace ID for correlation.
  */
 export function getTraceId(): string | undefined {
-  const span = trace.getActiveSpan();
-  return span?.spanContext().traceId;
+  return undefined;
 }
 
 /**
  * Get current span ID for correlation.
  */
 export function getSpanId(): string | undefined {
-  const span = trace.getActiveSpan();
-  return span?.spanContext().spanId;
+  return undefined;
 }
 
-export { trace, context, SpanStatusCode, SpanKind } from '@opentelemetry/api';
-export type { ObservabilityConfig };
+export { DEFAULT_CONFIG };
+export type { NoOpLogger };

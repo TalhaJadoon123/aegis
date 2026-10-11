@@ -131,6 +131,64 @@ export class Dashboard {
       send(res, 200, 'application/json', JSON.stringify({ ok: true, scans: (await this.listScans()).length }));
       return;
     }
+    if (path === '/readyz') {
+      // Readiness probe: checks if data directory is accessible and server can serve requests
+      try {
+        const scans = await this.listScans();
+        send(res, 200, 'application/json', {
+          ready: true,
+          scans: scans.length,
+          timestamp: new Date().toISOString(),
+        });
+      } catch (error) {
+        send(res, 503, 'application/json', {
+          ready: false,
+          error: (error as Error).message,
+          timestamp: new Date().toISOString(),
+        });
+      }
+      return;
+    }
+    if (path === '/metrics') {
+      // Basic Prometheus-style metrics endpoint
+      const scans = await this.listScans();
+      const criticalCount = scans.reduce((sum, s) => {
+        const findings = s.findings as Array<{ severity?: string }>;
+        return sum + findings.filter((f) => f.severity === 'critical').length;
+      }, 0);
+      const highCount = scans.reduce((sum, s) => {
+        const findings = s.findings as Array<{ severity?: string }>;
+        return sum + findings.filter((f) => f.severity === 'high').length;
+      }, 0);
+
+      const metrics = [
+        '# HELP aegis_scans_total Total number of scans',
+        '# TYPE aegis_scans_total gauge',
+        `aegis_scans_total ${scans.length}`,
+        '',
+        '# HELP aegis_findings_critical_total Total critical findings across all scans',
+        '# TYPE aegis_findings_critical_total gauge',
+        `aegis_findings_critical_total ${criticalCount}`,
+        '',
+        '# HELP aegis_findings_high_total Total high findings across all scans',
+        '# TYPE aegis_findings_high_total gauge',
+        `aegis_findings_high_total ${highCount}`,
+        '',
+        '# HELP aegis_uptime_seconds Server uptime in seconds',
+        '# TYPE aegis_uptime_seconds gauge',
+        `aegis_uptime_seconds ${process.uptime()}`,
+        '',
+        '# HELP aegis_memory_bytes Current memory usage',
+        '# TYPE aegis_memory_bytes gauge',
+        `aegis_memory_bytes{type="rss"} ${process.memoryUsage().rss}`,
+        `aegis_memory_bytes{type="heapUsed"} ${process.memoryUsage().heapUsed}`,
+        `aegis_memory_bytes{type="heapTotal"} ${process.memoryUsage().heapTotal}`,
+        '',
+      ].join('\n');
+
+      send(res, 200, 'text/plain; version=0.0.4; charset=utf-8', metrics);
+      return;
+    }
 
     // Static assets from the bundle directory.
     const asset = path === '/' ? 'index.html' : path.slice(1);

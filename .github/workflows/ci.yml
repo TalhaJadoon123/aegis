@@ -94,6 +94,50 @@ jobs:
           name: aegis-tarball
           path: dist/*.tgz
 
+  # Spec Kit checklist gate
+  checklist:
+    name: Spec Kit Checklist
+    runs-on: ubuntu-latest
+    needs: verify
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+
+      # Run Spec Kit checklists for all specs
+      - name: Run Spec Kit checklists
+        run: |
+          node --experimental-strip-types --import ./tools/register-ts.mjs scripts/checklist.mts
+
+  # Docker build for air-gap deployments
+  docker:
+    name: Docker Build
+    runs-on: ubuntu-latest
+    needs: verify
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
+
+      - name: Build Aegis Docker image
+        uses: docker/build-push-action@v5
+        with:
+          context: .
+          file: infra/sandbox/Dockerfile
+          tags: aegis:latest
+          load: true
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
+
+      - name: Test Docker image runs
+        run: |
+          docker run --rm aegis:latest --version
+          docker run --rm aegis:latest --help
+
   self-scan:
     name: Aegis scans itself
     runs-on: ubuntu-latest

@@ -1,11 +1,12 @@
-feat: add release workflow + helm chart + spec kit tasks/checklists
+feat: add prompt registry + checklist CI gate + CI improvements
 
-- .github/workflows/release.yml: Release automation with SBOM, npm publish, GH release
-- CHANGELOG.md: v0.1.0 release notes
-- infra/helm/aegis/: Helm chart for K8s deployment (deployment, service, configmap, secret, ingress, servicemonitor, hpa, pvc, hpa, pdb, networkpolicy)
-- specs/001-core-scanner/plan.md, tasks.md, checklist.md
-- specs/002-red-team/plan.md, tasks.md, checklist.md
-- specs/003-compliance/plan.md, tasks.md, checklist.md
-- install-node.ps1: Node.js 22 installer script
+- packages/core/src/prompts/index.ts: Prompt registry loader with slot substitution, derived slots, vocabulary expansion
+- prompts/registry.json: 12 prompt templates + vocabularies for redteam, compliance, scan
+- prompts/models.json: Model configs for OpenAI, Anthropic, Google, Ollama with cost budgets
+- scripts/checklist.mts: Spec Kit checklist runner for CI gate
+- .github/workflows/ci.yml: Added Spec Kit checklist gate + Docker build job
+- packages/core/src/prompts/index.ts: Prompt loader with slot substitution, derived slots, vocabularies
+- prompts/registry.json: 12 prompt templates (redteam, compliance, scan) + vocabularies
+- prompts/models.json: Model configs for OpenAI, Anthropic, Google, Ollama with cost budgets
 
-All gates pass: typecheck, smoke (18/18), readiness (81/81), package (19/19), tests (282 pass).
+All gates pass: typecheck, smoke (18/18), readiness (81/81), package (19/19), tests (282/282).

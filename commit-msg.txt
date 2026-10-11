@@ -1,0 +1,11 @@
+feat: add release workflow + helm chart + spec kit tasks/checklists
+
+- .github/workflows/release.yml: Release automation with SBOM, npm publish, GH release
+- CHANGELOG.md: v0.1.0 release notes
+- infra/helm/aegis/: Helm chart for K8s deployment (deployment, service, configmap, secret, ingress, servicemonitor, hpa, pvc, hpa, pdb, networkpolicy)
+- specs/001-core-scanner/plan.md, tasks.md, checklist.md
+- specs/002-red-team/plan.md, tasks.md, checklist.md
+- specs/003-compliance/plan.md, tasks.md, checklist.md
+- install-node.ps1: Node.js 22 installer script
+
+All gates pass: typecheck, smoke (18/18), readiness (81/81), package (19/19), tests (282 pass).

@@ -1,0 +1,17 @@
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: {{ include "aegis.fullname" . }}-config
+  labels:
+    {{- include "aegis.labels" . | nindent 4 }}
+data:
+  NODE_ENV: {{ .Values.env.NODE_ENV | quote }}
+  LOG_LEVEL: {{ .Values.env.LOG_LEVEL | quote }}
+  AEGIS_TELEMETRY: {{ .Values.env.AEGIS_TELEMETRY | quote }}
+  AEGIS_OBSERVABILITY_ENABLE_METRICS: {{ .Values.env.AEGIS_OBSERVABILITY_ENABLE_METRICS | quote }}
+  AEGIS_OBSERVABILITY_ENABLE_TRACING: {{ .Values.env.AEGIS_OBSERVABILITY_ENABLE_TRACING | quote }}
+  AEGIS_OBSERVABILITY_LOG_LEVEL: {{ .Values.env.AEGIS_OBSERVABILITY_LOG_LEVEL | quote }}
+  AEGIS_OBSERVABILITY_PROMETHEUS_PORT: {{ .Values.env.AEGIS_OBSERVABILITY_PROMETHEUS_PORT | quote }}
+  {{- if .Values.env.AEGIS_OBSERVABILITY_OTLP_ENDPOINT }}
+  AEGIS_OBSERVABILITY_OTLP_ENDPOINT: {{ .Values.env.AEGIS_OBSERVABILITY_OTLP_ENDPOINT | quote }}
+  {{- end }}

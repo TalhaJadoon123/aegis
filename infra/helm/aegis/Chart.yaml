@@ -1,0 +1,18 @@
+apiVersion: v2
+name: aegis
+description: Aegis — The security platform for AI agents
+type: application
+version: 0.1.0
+appVersion: "0.1.0"
+keywords:
+  - security
+  - ai
+  - mcp
+  - red-team
+  - compliance
+maintainers:
+  - name: Aegis Security
+    email: security@aegis.dev
+home: https://aegis.dev
+sources:
+  - https://github.com/TalhaJadoon123/aegis

@@ -1,0 +1,238 @@
+# Default values for Aegis Helm chart
+# Copy to values-{env}.yaml and customize per environment
+
+replicaCount: 1
+
+image:
+  repository: ghcr.io/talhajadoon123/aegis
+  pullPolicy: IfNotPresent
+  tag: "0.1.0"
+
+imagePullSecrets: []
+nameOverride: ""
+fullnameOverride: ""
+
+serviceAccount:
+  create: true
+  annotations: {}
+  name: ""
+
+podAnnotations: {}
+podLabels: {}
+
+podSecurityContext:
+  runAsNonRoot: true
+  runAsUser: 1000
+  runAsGroup: 1000
+  fsGroup: 1000
+  capabilities:
+    drop:
+      - ALL
+  seccompProfile:
+    type: RuntimeDefault
+
+securityContext:
+  allowPrivilegeEscalation: false
+  capabilities:
+    drop:
+      - ALL
+  readOnlyRootFilesystem: true
+  runAsNonRoot: true
+  runAsUser: 1000
+
+service:
+  type: ClusterIP
+  port: 8080
+  targetPort: 8080
+  name: http
+
+ingress:
+  enabled: false
+  className: ""
+  annotations:
+    cert-manager.io/cluster-issuer: letsencrypt-prod
+    nginx.ingress.kubernetes.io/proxy-body-size: "50m"
+    nginx.ingress.kubernetes.io/proxy-read-timeout: "300"
+    nginx.ingress.kubernetes.io/proxy-send-timeout: "300"
+  hosts:
+    - host: aegis.example.com
+      paths:
+        - path: /
+          pathType: Prefix
+  tls:
+    - secretName: aegis-tls
+      hosts:
+        - aegis.example.com
+
+resources:
+  limits:
+    cpu: 1000m
+    memory: 1Gi
+  requests:
+    cpu: 100m
+    memory: 256Mi
+
+autoscaling:
+  enabled: true
+  minReplicas: 1
+  maxReplicas: 10
+  targetCPUUtilizationPercentage: 70
+  targetMemoryUtilizationPercentage: 80
+
+persistence:
+  enabled: true
+  storageClass: ""
+  accessMode: ReadWriteOnce
+  size: 10Gi
+  existingClaim: ""
+
+env:
+  # Core
+  NODE_ENV: production
+  LOG_LEVEL: info
+  AEGIS_TELEMETRY: "0"
+
+  # Dashboard (optional)
+  # NEXT_PUBLIC_APP_URL: ""
+  # NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY: ""
+  # CLERK_SECRET_KEY: ""
+  # AEGIS_DASHBOARD_TOKEN: ""
+
+  # BYOK LLM keys (for redteam/fix)
+  # OPENAI_API_KEY: ""
+  # ANTHROPIC_API_KEY: ""
+  # GOOGLE_API_KEY: ""
+  # OLLAMA_HOST: ""
+
+  # Observability
+  AEGIS_OBSERVABILITY_ENABLE_METRICS: "1"
+  AEGIS_OBSERVABILITY_ENABLE_TRACING: "1"
+  AEGIS_OBSERVABILITY_LOG_LEVEL: "info"
+  AEGIS_OBSERVABILITY_PROMETHEUS_PORT: "9464"
+  # AEGIS_OBSERVABILITY_OTLP_ENDPOINT: ""
+
+  # Payments (optional)
+  # STRIPE_SECRET_KEY: ""
+  # STRIPE_WEBHOOK_SECRET: ""
+  # STRIPE_PRO_PRICE_ID: ""
+  # STRIPE_TEAM_PRICE_ID: ""
+
+# Secrets that should be provided via ExternalSecrets or SealedSecrets
+# These are NOT in values.yaml - use ExternalSecrets operator or SealedSecrets
+secrets: {}
+  # DATABASE_URL: ""
+  # REDIS_URL: ""
+  # OPENAI_API_KEY: ""
+  # ANTHROPIC_API_KEY: ""
+  # GOOGLE_API_KEY: ""
+  # STRIPE_SECRET_KEY: ""
+  # STRIPE_WEBHOOK_SECRET: ""
+  # AEGIS_DASHBOARD_TOKEN: ""
+  # SENTRY_DSN: ""
+  # OTEL_EXPORTER_OTLP_ENDPOINT: ""
+
+# External secrets configuration (for ExternalSecrets Operator)
+externalSecrets:
+  enabled: false
+  secretStoreRef:
+    name: aws-secretsmanager
+    kind: ClusterSecretStore
+  refreshInterval: 1h
+
+# Database (external - use Cloud SQL, RDS, etc.)
+postgresql:
+  enabled: false
+  host: ""
+  port: 5432
+  database: aegis
+  # username and password via secrets
+
+redis:
+  enabled: false
+  host: ""
+  port: 6379
+  # password via secrets
+
+# Network policies
+networkPolicy:
+  enabled: true
+  ingress:
+    - from:
+        - namespaceSelector:
+            matchLabels:
+              name: ingress-nginx
+      ports:
+        - protocol: TCP
+          port: 8080
+  egress:
+    - to:
+        - namespaceSelector: {}
+      ports:
+        - protocol: TCP
+          port: 53
+        - protocol: UDP
+          port: 53
+    # Allow egress to external APIs (GitHub, OSV, NVD, etc.)
+    - to:
+        - ipBlock:
+            cidr: 0.0.0.0/0
+            except:
+              - 10.0.0.0/8
+              - 172.16.0.0/12
+              - 192.168.0.0/16
+      ports:
+        - protocol: TCP
+          port: 443
+        - protocol: TCP
+          port: 80
+
+# Pod disruption budget
+pdb:
+  enabled: true
+  minAvailable: 1
+
+# Service monitor for Prometheus
+serviceMonitor:
+  enabled: true
+  interval: 30s
+  scrapeTimeout: 10s
+  additionalLabels:
+    release: prometheus
+
+# Health checks
+livenessProbe:
+  httpGet:
+    path: /healthz
+    port: http
+  initialDelaySeconds: 30
+  periodSeconds: 10
+  timeoutSeconds: 5
+  failureThreshold: 3
+
+readinessProbe:
+  httpGet:
+    path: /readyz
+    port: http
+  initialDelaySeconds: 10
+  periodSeconds: 5
+  timeoutSeconds: 3
+  failureThreshold: 3
+
+# Node selector and tolerations for dedicated nodes
+nodeSelector: {}
+tolerations: []
+affinity: {}
+
+# Additional volumes and mounts
+extraVolumes: []
+extraVolumeMounts: []
+
+# Lifecycle hooks
+lifecycle:
+  preStop:
+    exec:
+      command: ["/bin/sh", "-c", "sleep 10"]
+
+# Command override (for scanner vs dashboard)
+command: []
+args: []

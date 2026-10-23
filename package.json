@@ -2,6 +2,7 @@
   "name": "aegis-monorepo",
   "version": "0.1.0",
   "private": true,
+  "type": "module",
   "description": "Aegis — The security platform for AI agents.",
   "license": "MIT",
   "packageManager": "pnpm@9.15.0",

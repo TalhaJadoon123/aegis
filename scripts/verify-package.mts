@@ -145,7 +145,7 @@ try {
     const rt = run(NPX, ['aegis', 'redteam', '--dry-run', '--population', '4', '--generations', '1', '--budget', '8'], { cwd: sandbox });
     check('redteam --dry-run works', rt.code === 0 && rt.out.includes('Red team report'));
 
-    const rules = readdirSync(join(sandbox, 'node_modules', 'aegis', 'packages', 'rules', 'rules'));
+    const rules = readdirSync(join(sandbox, 'node_modules', '@talhajadoon123', 'aegis', 'packages', 'rules', 'rules'));
     check('rule packs are readable from the install', rules.length >= 6, `${rules.length} packs`);
 
     // The installed tree must contain nothing but Aegis. npm's own bookkeeping
@@ -153,7 +153,7 @@ try {
     const installedPkgs = readdirSync(join(sandbox, 'node_modules'))
       .filter((p) => !p.startsWith('.'));
     check('zero transitive dependencies',
-      installedPkgs.length === 1 && installedPkgs[0] === 'aegis',
+      installedPkgs.length === 1 && installedPkgs[0] === '@talhajadoon123',
       installedPkgs.join(','));
   }
 } finally {

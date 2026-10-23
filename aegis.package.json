@@ -1,5 +1,5 @@
 {
-  "name": "aegis",
+  "name": "@talhajadoon123/aegis",
   "version": "0.1.0",
   "description": "The security platform for AI agents. Scan MCP servers, agent code and runtime behaviour; evolutionary red teaming; behavioural fingerprinting; self-healing remediation; living attack graph.",
   "license": "MIT",

@@ -3,6 +3,7 @@ import { readFile } from 'node:fs/promises';
 import { existsSync } from 'node:fs';
 import { extname, join, resolve, dirname, normalize } from 'node:path';
 import { fileURLToPath } from 'node:url';
+import { AuditLogger } from '../../core/src/audit/index.js';
 
 /**
  * Aegis dashboard.
@@ -44,6 +45,7 @@ export class Dashboard {
   private readonly host: string;
   private readonly token: string | undefined;
   private readonly logger: DashboardOptions['logger'];
+  private readonly audit: AuditLogger;
   /** Held so the server can be stopped; a bare listen keeps the process alive. */
   private server: import('node:http').Server | null = null;
 
@@ -55,6 +57,7 @@ export class Dashboard {
     // evidence, and file paths.
     this.host = options.host ?? (this.token ? '127.0.0.1' : '127.0.0.1');
     this.logger = options.logger;
+    this.audit = new AuditLogger(join(this.dataDir, '..', 'audit'));
   }
 
   async start(): Promise<{ url: string; port: number }> {
@@ -110,6 +113,12 @@ export class Dashboard {
     }
 
     if (path === '/api/scans') {
+      this.audit.log({
+        action: 'dashboard.accessed',
+        actor: { id: this.token ? 'authenticated' : 'anonymous', type: this.token ? 'user' : 'system' },
+        resource: { type: 'dashboard', id: 'scans' },
+        result: 'success',
+      });
       send(res, 200, 'application/json', JSON.stringify(await this.listScans()));
       return;
     }
@@ -129,6 +138,15 @@ export class Dashboard {
     }
     if (path === '/healthz') {
       send(res, 200, 'application/json', JSON.stringify({ ok: true, scans: (await this.listScans()).length }));
+      return;
+    }
+    if (path === '/api/audit') {
+      const records = this.audit.query({});
+      send(res, 200, 'application/json', JSON.stringify({ records, total: records.length }));
+      return;
+    }
+    if (path === '/api/audit/stats') {
+      send(res, 200, 'application/json', JSON.stringify(this.audit.getStats()));
       return;
     }
     if (path === '/readyz') {

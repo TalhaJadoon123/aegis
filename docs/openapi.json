@@ -1,0 +1,410 @@
+{
+  "openapi": "3.1.0",
+  "info": {
+    "title": "Aegis Dashboard API",
+    "description": "REST API for Aegis scan data, findings, compliance reports, and scan triggers.",
+    "version": "1.0.0",
+    "contact": {
+      "name": "Aegis Security",
+      "url": "https://aegis.dev"
+    }
+  },
+  "servers": [
+    {
+      "url": "http://localhost:8080",
+      "description": "Local development"
+    },
+    {
+      "url": "https://api.aegis.dev",
+      "description": "Production"
+    }
+  ],
+  "security": [
+    {
+      "bearerAuth": []
+    }
+  ],
+  "components": {
+    "securitySchemes": {
+      "bearerAuth": {
+        "type": "http",
+        "scheme": "bearer",
+        "description": "Aegis Dashboard Token (AEGIS_DASHBOARD_TOKEN)"
+      }
+    },
+    "schemas": {
+      "Scan": {
+        "type": "object",
+        "properties": {
+          "id": { "type": "string", "description": "Unique scan ID" },
+          "target": { "type": "string", "description": "Scan target path or URL" },
+          "startedAt": { "type": "string", "format": "date-time" },
+          "durationMs": { "type": "integer" },
+          "score": { "type": "integer", "minimum": 0, "maximum": 100 },
+          "grade": { "type": "string", "enum": ["A", "B", "C", "D", "F"] },
+          "findings": { "type": "array", "items": { "$ref": "#/components/schemas/Finding" } }
+        }
+      },
+      "Finding": {
+        "type": "object",
+        "properties": {
+          "id": { "type": "string" },
+          "ruleId": { "type": "string" },
+          "title": { "type": "string" },
+          "description": { "type": "string" },
+          "severity": { "type": "string", "enum": ["critical", "high", "medium", "low", "info"] },
+          "confidence": { "type": "string", "enum": ["confirmed", "high", "medium", "low"] },
+          "location": {
+            "type": "object",
+            "properties": {
+              "file": { "type": "string" },
+              "line": { "type": "integer" },
+              "column": { "type": "integer" },
+              "component": { "type": "string" }
+            }
+          },
+          "evidence": { "type": "string" },
+          "remediation": {
+            "type": "object",
+            "properties": {
+              "title": { "type": "string" },
+              "description": { "type": "string" },
+              "automated": { "type": "boolean" },
+              "effort": { "type": "string" }
+            }
+          },
+          "compliance": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "properties": {
+                "framework": { "type": "string" },
+                "control": { "type": "string" },
+                "title": { "type": "string" },
+                "relevant": { "type": "boolean" }
+              }
+            }
+          },
+          "fingerprint": { "type": "string" },
+          "taxonomy": { "type": "string" },
+          "cwe": { "type": "string" }
+        }
+      },
+      "HealthResponse": {
+        "type": "object",
+        "properties": {
+          "ok": { "type": "boolean" },
+          "scans": { "type": "integer" }
+        }
+      },
+      "ReadyResponse": {
+        "type": "object",
+        "properties": {
+          "ready": { "type": "boolean" },
+          "scans": { "type": "integer" },
+          "timestamp": { "type": "string", "format": "date-time" }
+        }
+      },
+      "MetricsResponse": {
+        "type": "string",
+        "description": "Prometheus-formatted metrics"
+      },
+      "Webhook": {
+        "type": "object",
+        "properties": {
+          "id": { "type": "string" },
+          "url": { "type": "string", "format": "uri" },
+          "events": {
+            "type": "array",
+            "items": {
+              "type": "string",
+              "enum": [
+                "scan.completed",
+                "scan.failed",
+                "finding.critical",
+                "finding.high",
+                "finding.new",
+                "compliance.violation",
+                "redteam.bypass"
+              ]
+            }
+          },
+          "active": { "type": "boolean" }
+        }
+      },
+      "UsageRecord": {
+        "type": "object",
+        "properties": {
+          "userId": { "type": "string" },
+          "orgId": { "type": "string" },
+          "timestamp": { "type": "string", "format": "date-time" },
+          "action": { "type": "string" },
+          "resourceId": { "type": "string" },
+          "metadata": { "type": "object" }
+        }
+      }
+    }
+  },
+  "paths": {
+    "/healthz": {
+      "get": {
+        "summary": "Health check",
+        "operationId": "healthCheck",
+        "responses": {
+          "200": {
+            "description": "Server is healthy",
+            "content": {
+              "application/json": {
+                "schema": { "$ref": "#/components/schemas/HealthResponse" }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/readyz": {
+      "get": {
+        "summary": "Readiness check",
+        "operationId": "readinessCheck",
+        "responses": {
+          "200": {
+            "description": "Server is ready",
+            "content": {
+              "application/json": {
+                "schema": { "$ref": "#/components/schemas/ReadyResponse" }
+              }
+            }
+          },
+          "503": {
+            "description": "Server is not ready"
+          }
+        }
+      }
+    },
+    "/metrics": {
+      "get": {
+        "summary": "Prometheus metrics",
+        "operationId": "metrics",
+        "responses": {
+          "200": {
+            "description": "Metrics in Prometheus text format",
+            "content": {
+              "text/plain": {
+                "schema": { "$ref": "#/components/schemas/MetricsResponse" }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/scans": {
+      "get": {
+        "summary": "List scans",
+        "operationId": "listScans",
+        "security": [{ "bearerAuth": [] }],
+        "responses": {
+          "200": {
+            "description": "List of scans",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "scans": { "type": "array", "items": { "$ref": "#/components/schemas/Scan" } },
+                    "total": { "type": "integer" }
+                  }
+                }
+              }
+            }
+          }
+        }
+      },
+      "post": {
+        "summary": "Create scan",
+        "operationId": "createScan",
+        "security": [{ "bearerAuth": [] }],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "target": { "type": "string" },
+                  "format": { "type": "string" }
+                }
+              }
+            }
+          }
+        },
+        "responses": {
+          "201": {
+            "description": "Scan created",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "scan": { "$ref": "#/components/schemas/Scan" }
+                  }
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/findings": {
+      "get": {
+        "summary": "List findings",
+        "operationId": "listFindings",
+        "security": [{ "bearerAuth": [] }],
+        "responses": {
+          "200": {
+            "description": "List of findings",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "findings": { "type": "array", "items": { "$ref": "#/components/schemas/Finding" } },
+                    "total": { "type": "integer" }
+                  }
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/compliance": {
+      "get": {
+        "summary": "Get compliance data",
+        "operationId": "getCompliance",
+        "security": [{ "bearerAuth": [] }],
+        "responses": {
+          "200": {
+            "description": "Compliance data"
+          }
+        }
+      }
+    },
+    "/api/v1/compliance/attestation": {
+      "post": {
+        "summary": "Generate compliance attestation",
+        "operationId": "generateAttestation",
+        "security": [{ "bearerAuth": [] }],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "organisation": { "type": "string" },
+                  "system": { "type": "string" },
+                  "owner": { "type": "string" },
+                  "frameworks": { "type": "array", "items": { "type": "string" } }
+                }
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Attestation generated"
+          }
+        }
+      }
+    },
+    "/api/v1/redteam": {
+      "post": {
+        "summary": "Create red team run",
+        "operationId": "createRedTeam",
+        "security": [{ "bearerAuth": [] }],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "target": { "type": "string" },
+                  "dryRun": { "type": "boolean" },
+                  "budget": { "type": "integer" },
+                  "population": { "type": "integer" },
+                  "generations": { "type": "integer" }
+                }
+              }
+            }
+          }
+        },
+        "responses": {
+          "201": {
+            "description": "Red team run created"
+          }
+        }
+      }
+    },
+    "/api/v1/webhooks": {
+      "get": {
+        "summary": "List webhooks",
+        "operationId": "listWebhooks",
+        "security": [{ "bearerAuth": [] }],
+        "responses": {
+          "200": {
+            "description": "List of webhooks",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "webhooks": { "type": "array", "items": { "$ref": "#/components/schemas/Webhook" } },
+                    "total": { "type": "integer" }
+                  }
+                }
+              }
+            }
+          }
+        }
+      },
+      "post": {
+        "summary": "Create webhook",
+        "operationId": "createWebhook",
+        "security": [{ "bearerAuth": [] }],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "url": { "type": "string", "format": "uri" },
+                  "events": { "type": "array", "items": { "type": "string" } },
+                  "secret": { "type": "string" }
+                }
+              }
+            }
+          }
+        },
+        "responses": {
+          "201": {
+            "description": "Webhook created"
+          }
+        }
+      }
+    },
+    "/api/v1/usage": {
+      "get": {
+        "summary": "Get usage records",
+        "operationId": "getUsage",
+        "security": [{ "bearerAuth": [] }],
+        "responses": {
+          "200": {
+            "description": "Usage records"
+          }
+        }
+      }
+    }
+  }
+}

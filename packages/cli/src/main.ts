@@ -16,6 +16,7 @@ import {
 } from './args.js';
 import { createLogger, type Logger } from '../../core/src/logger.js';
 import { PluginRegistry } from '../../core/src/registry.js';
+import { initObservability, getLogger, createChildLogger } from '../../core/src/observability/index.js';
 import { loadRulePacks } from '../../core/src/rules/index.js';
 import { computeScore, dedupeFindings, sortFindings, toSeverity } from '../../core/src/severity.js';
 import { AgentScanner } from '../../core/src/scanners/agent/scanner.js';
@@ -165,6 +166,18 @@ const COMMANDS: Record<string, { summary: string; options: OptionSpec[]; run: (a
 // ---------------------------------------------------------------------------
 
 export async function main(argv: readonly string[]): Promise<number> {
+  // Initialize observability (logging, metrics, tracing)
+  // All features are opt-in via environment variables or config
+  const observability = await initObservability({
+    serviceName: 'aegis-cli',
+    serviceVersion: VERSION,
+    environment: process.env['NODE_ENV'] ?? 'development',
+    enableLogging: process.env['AEGIS_LOG_LEVEL'] !== undefined,
+    enableMetrics: process.env['AEGIS_METRICS_PORT'] !== undefined,
+    enableTracing: process.env['AEGIS_OTLP_ENDPOINT'] !== undefined,
+    logLevel: (process.env['AEGIS_LOG_LEVEL'] as 'trace' | 'debug' | 'info' | 'warn' | 'error' | 'fatal') ?? 'info',
+  });
+
   if (argv.length === 0 || argv[0] === '--help' || argv[0] === '-h' || argv[0] === 'help') {
     printHelp();
     return 0;
@@ -278,6 +291,24 @@ async function cmdScan(args: ParsedArgs): Promise<number> {
   const errors: string[] = [];
   const artifacts: Record<string, unknown> = {};
   const targetType: ScanTargetType = inferTargetType(targetPath);
+
+  // Load config file if specified via --config.
+  const configPath = getString(args, 'config');
+  if (configPath) {
+    try {
+      const { loadConfigFile } = (await import(
+        pathToFileURL(join(ROOT, 'config', 'index.ts')).href
+      )) as { loadConfigFile: (path: string) => Promise<{ success: boolean; errors?: string[] }> };
+      const result = await loadConfigFile(resolve(configPath));
+      if (!result.success) {
+        logger.warn(`Config file errors: ${result.errors?.join(', ') ?? 'unknown'}`);
+      } else {
+        logger.info(`Loaded config from ${configPath}`);
+      }
+    } catch (error) {
+      logger.warn(`Could not load config file: ${(error as Error).message}`);
+    }
+  }
 
   // Agent / repository scan.
   const agentScanner = new AgentScanner({ rules: loaded.rules });

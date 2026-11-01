@@ -6,7 +6,7 @@ replicaCount: 1
 image:
   repository: ghcr.io/talhajadoon123/aegis
   pullPolicy: IfNotPresent
-  tag: "0.1.0"
+  tag: "0.1.1"
 
 imagePullSecrets: []
 nameOverride: ""
@@ -192,8 +192,9 @@ pdb:
   minAvailable: 1
 
 # Service monitor for Prometheus
+# Off by default: it requires the Prometheus Operator CRDs to be installed.
 serviceMonitor:
-  enabled: true
+  enabled: false
   interval: 30s
   scrapeTimeout: 10s
   additionalLabels:
@@ -233,6 +234,16 @@ lifecycle:
     exec:
       command: ["/bin/sh", "-c", "sleep 10"]
 
-# Command override (for scanner vs dashboard)
+# Container entrypoint override. Empty means the image ENTRYPOINT is used.
 command: []
-args: []
+# Default container arguments: serve the dashboard on the Service port.
+# The image's own CMD is `--help`, which is right for a CLI but wrong for a pod.
+args:
+  - desktop
+  - --no-open
+  - --host
+  - 0.0.0.0
+  - --port
+  - "8080"
+  - --data
+  - /workspace/.aegis/dashboard

@@ -10,7 +10,7 @@ and a living community threat graph.
 
 [![MIT](https://img.shields.io/badge/license-MIT-blue.svg)](LICENSE)
 [![rules](https://img.shields.io/badge/rules-CC0%201.0-lightgrey.svg)](packages/rules/LICENSE)
-[![node](https://img.shields.io/badge/node-%E2%89%A520-green.svg)](https://nodejs.org)
+[![node](https://img.shields.io/badge/node-%E2%89%A522-green.svg)](https://nodejs.org)
 [![deps](https://img.shields.io/badge/runtime%20deps-0-brightgreen.svg)](package.json)
 
 </div>
@@ -50,21 +50,32 @@ Aegis has **zero runtime npm dependencies**. A security tool that pulls thirty
 transitive packages to read its own command line has a supply-chain problem,
 and if you are deploying this into a customer network you already know it.
 
+**Option 1 — install the verified release tarball** (no npm account needed):
+
+```bash
+npm install -g https://github.com/TalhaJadoon123/aegis/releases/download/v0.1.1/talhajadoon123-aegis-0.1.1.tgz
+aegis --version
+```
+
+**Option 2 — run from source** (Node 22+ only, nothing to install):
+
 ```bash
 git clone https://github.com/TalhaJadoon123/aegis
 cd aegis
-
-# Node 22+ only. Nothing to install.
 node packages/cli/src/bin.ts --version
 ```
 
-Requires Node 22 or later (for native TypeScript execution). For a compiled
-build or an npm install:
+**Option 3 — container:**
 
 ```bash
-pnpm install && pnpm build
-aegis --version
+docker build -t aegis:0.1.1 -f infra/sandbox/Dockerfile .
+docker run --rm -v "$PWD:/workspace:ro" aegis:0.1.1 scan /workspace
 ```
+
+On Windows PowerShell the equivalent is
+`docker run --rm -v "${PWD}:/workspace:ro" aegis:0.1.1 scan /workspace`.
+
+Requires Node 22 or later (for native TypeScript execution).
 
 ## Quick start
 

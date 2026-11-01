@@ -13,10 +13,13 @@ spec:
     matchLabels:
       {{- include "aegis.selectorLabels" . | nindent 6 }}
   endpoints:
-    - port: metrics
+    # The dashboard serves Prometheus text on the same port as HTTP
+    # (`/metrics`), so there is no separate metrics listener to scrape.
+    - port: http
       interval: {{ .Values.serviceMonitor.interval }}
       scrapeTimeout: {{ .Values.serviceMonitor.scrapeTimeout }}
       path: /metrics
   namespaceSelector:
     matchNames:
       - {{ .Release.Namespace }}
+{{- end }}

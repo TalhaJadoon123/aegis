@@ -16,3 +16,4 @@ spec:
     {{- toYaml .Values.networkPolicy.ingress | nindent 4 }}
   egress:
     {{- toYaml .Values.networkPolicy.egress | nindent 4 }}
+{{- end }}

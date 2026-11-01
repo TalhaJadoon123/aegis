@@ -11,11 +11,5 @@ spec:
       targetPort: http
       protocol: TCP
       name: http
-    {{- if .Values.serviceMonitor.enabled }}
-    - name: metrics
-      port: {{ .Values.env.AEGIS_OBSERVABILITY_PROMETHEUS_PORT | default 9464 }}
-      targetPort: metrics
-      protocol: TCP
-    {{- end }}
   selector:
     {{- include "aegis.selectorLabels" . | nindent 4 }}

@@ -2,7 +2,7 @@
 
 ## What gets published
 
-One package, `aegis`, with **zero runtime dependencies**. It contains:
+One package, `@talhajadoon123/aegis`, with **zero runtime dependencies**. It contains:
 
 | Path | What |
 |---|---|
@@ -17,7 +17,7 @@ One package, `aegis`, with **zero runtime dependencies**. It contains:
 ```bash
 npm run package          # compile, stage, verify, pack
 npm run package:verify   # install into a temp dir and exercise it
-npm publish dist/aegis-0.1.0.tgz
+npm publish dist/talhajadoon123-aegis-0.1.1.tgz
 ```
 
 `npm run package` refuses to produce a tarball unless the staged package passes
@@ -67,25 +67,39 @@ can:
 - read the bundled rule packs
 - install with **zero transitive dependencies**
 
+## Install without a registry
+
+The GitHub Release carries the same verified tarball, so no npm account or
+login is needed:
+
+```bash
+npm install -g https://github.com/TalhaJadoon123/aegis/releases/download/v0.1.1/talhajadoon123-aegis-0.1.1.tgz
+aegis --version
+```
+
+On Windows PowerShell:
+
+```powershell
+npm install -g https://github.com/TalhaJadoon123/aegis/releases/download/v0.1.1/talhajadoon123-aegis-0.1.1.tgz
+aegis --version
+```
+
 ## Before the first publish
 
-- [ ] `npm view aegis` resolves once published
-- [ ] Confirm the tarball size (currently ~264 KB)
-- [ ] Confirm `npm install -g aegis` puts a working `aegis` on PATH
-- [ ] Tag the release: `git tag v0.1.0`
+- [ ] `npm view @talhajadoon123/aegis` resolves once published
+- [ ] Confirm the tarball size (currently ~300 KB)
+- [ ] Confirm `npm install -g @talhajadoon123/aegis` puts a working `aegis` on PATH
+- [ ] Tag the release: `git tag v0.1.1`
 - [ ] Add the integrity hash to the release notes
 
 ## Registry
 
-The package is named `aegis`. If the name is taken on npm, publish under a
-scoped name instead and update `bin` and `keywords` in `aegis.package.json`:
+The unscoped name `aegis` is already owned by an unrelated project, so this
+package ships under the `@talhajadoon123` scope:
 
 ```bash
-npm publish dist/aegis-0.1.0.tgz --access public --registry https://registry.npmjs.org
+npm publish dist/talhajadoon123-aegis-0.1.1.tgz --access public --registry https://registry.npmjs.org
 ```
-
-For a scope, set `"name": "@aegis-security/aegis"` and publish with
-`--access public`.
 
 ## Licence
 

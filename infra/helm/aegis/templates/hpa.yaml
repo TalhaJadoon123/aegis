@@ -46,3 +46,4 @@ spec:
           value: 4
           periodSeconds: 15
       selectPolicy: Max
+{{- end }}

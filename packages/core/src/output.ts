@@ -37,7 +37,7 @@ export interface AegisDocument {
   rulePacks?: Array<{ id: string; version: string; ruleCount: number }>;
 }
 
-export const AEGIS_VERSION = '0.1.0';
+export const AEGIS_VERSION = '0.1.1';
 export const AEGIS_URI = 'https://aegis.dev';
 
 // ---------------------------------------------------------------------------

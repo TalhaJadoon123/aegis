@@ -86,7 +86,7 @@ pnpm run typecheck
 pnpm run test:all
 
 # Build
-npm run package          # Creates dist/aegis-0.1.0.tgz
+npm run package          # Creates dist/talhajadoon123-aegis-<version>.tgz
 npm run package:verify   # Installs tarball + exercises it
 
 # CI gates

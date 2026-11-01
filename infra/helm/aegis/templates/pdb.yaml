@@ -10,3 +10,4 @@ spec:
   selector:
     matchLabels:
       {{- include "aegis.selectorLabels" . | nindent 6 }}
+{{- end }}

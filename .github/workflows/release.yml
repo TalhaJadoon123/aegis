@@ -44,8 +44,8 @@ jobs:
           fi
           echo "Version matches: $PKG_VERSION"
 
-      - name: Install dependencies
-        run: npm ci --no-audit --no-fund
+      - name: Install TypeScript for typechecking
+        run: npm install --no-save --no-audit --no-fund typescript@5.7.2
 
       - name: Run full verification
         run: npm run verify
@@ -56,10 +56,21 @@ jobs:
       - name: Verify tarball
         run: npm run package:verify
 
-      - name: Generate SBOM
+      - name: Set up Helm
+        uses: azure/setup-helm@v4
+        with:
+          version: v3.16.4
+
+      - name: Lint and package the Helm chart
         run: |
-          npx @cyclonedx/bom@latest -o sbom.json --json
-          echo "SBOM generated"
+          helm lint infra/helm/aegis
+          helm lint infra/helm/aegis \
+            --set serviceMonitor.enabled=true \
+            --set ingress.enabled=true
+          helm package infra/helm/aegis -d dist
+
+      - name: Generate SBOM
+        run: npm run sbom
 
       - name: Create GitHub Release
         uses: softprops/action-gh-release@v2
@@ -68,20 +79,34 @@ jobs:
           name: Aegis ${{ github.ref_name }}
           body_path: CHANGELOG.md
           files: |
-            dist/*.tgz
-            sbom.json
+            dist/talhajadoon123-aegis-*.tgz
+            dist/aegis-*.tgz
+            dist/sbom.json
+            install.ps1
+            install.sh
           draft: false
           prerelease: false
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
+      - name: Check npm credentials
+        id: npm
+        env:
+          NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
+        run: |
+          if [ -n "$NODE_AUTH_TOKEN" ]; then
+            echo "publish=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "publish=false" >> "$GITHUB_OUTPUT"
+            echo "NPM_TOKEN is not configured; skipping npm publish. The release assets are still installable with npm install -g <tarball URL>."
+          fi
+
       - name: Publish to npm
-        if: ${{ github.repository == 'TalhaJadoon123/aegis' }}
-        run: npm publish dist/*.tgz --access public --provenance
+        if: steps.npm.outputs.publish == 'true'
+        run: npm publish dist/talhajadoon123-aegis-*.tgz --access public --provenance
         env:
           NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
 
       - name: Verify published package
-        run: |
-          npm pack --dry-run 2>&1 | head -20
-          echo "Package published successfully"
+        if: steps.npm.outputs.publish == 'true'
+        run: npm view @talhajadoon123/aegis version

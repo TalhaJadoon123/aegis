@@ -7,6 +7,26 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ---
 
+## [0.1.1] - 2026-10-24
+
+### Added
+- **Audit logging** (`packages/core/src/audit`): append-only JSONL audit trail with actor/resource/action/result records, query filters, statistics, and export for SOC 2, ISO 27001, EU AI Act and GDPR evidence requests
+- **Dashboard audit API**: `/api/audit` and `/api/audit/stats`, with access events recorded automatically
+- **Enterprise layer**: REST API with rate limiting and webhooks, usage metering with plan quotas, cron scheduler, circuit breakers, Slack/Jira integrations, compliance export, OpenAPI description
+- **Observability**: structured logger, no-op-capable OpenTelemetry tracer, `/readyz` and Prometheus `/metrics` on the dashboard
+- **Config validation**: schema-validated CLI/environment configuration (`config/index.ts`, `--config`)
+- **Deployment**: Helm chart (`infra/helm/aegis`), release workflow with SBOM and provenance, Docker image under `infra/sandbox/Dockerfile`
+- **Prompt registry**: 12 versioned attack templates plus model/cost configuration (`prompts/`)
+- **npm distribution**: scoped package `@talhajadoon123/aegis` with zero runtime dependencies
+
+### Changed
+- Published package renamed to `@talhajadoon123/aegis` (the unscoped `aegis` name is owned by another project)
+- Root package marked `"type": "module"` for ESM consistency inside the container image
+
+### Fixed
+- Package verification resolves scoped install paths and asserts zero transitive dependencies
+- Recovery of the publication build after the scope rename
+
 ## [0.1.0] - 2026-10-11
 
 ### Added

@@ -1,0 +1,28 @@
+Aegis {{ .Chart.AppVersion }} is installed.
+
+1. Check the rollout:
+
+   kubectl -n {{ .Release.Namespace }} rollout status deploy/{{ include "aegis.fullname" . }}
+
+2. Reach the dashboard (no ingress by default):
+
+   kubectl -n {{ .Release.Namespace }} port-forward svc/{{ include "aegis.fullname" . }} 8080:{{ .Values.service.port }}
+   # then open http://127.0.0.1:8080
+
+   {{- if not (index .Values.secrets "AEGIS_DASHBOARD_TOKEN") }}
+
+   WARNING: AEGIS_DASHBOARD_TOKEN is not set. The dashboard shows findings,
+   evidence and file paths, so set a token before exposing it outside the
+   cluster:
+
+   helm upgrade {{ .Release.Name }} {{ .Chart.Name }} --set secrets.AEGIS_DASHBOARD_TOKEN=$(openssl rand -hex 24)
+   {{- end }}
+
+3. Scan a repository inside the cluster or with the CLI:
+
+   aegis scan /path/to/agent --format sarif --output aegis.sarif
+
+{{- if .Values.ingress.enabled }}
+
+4. Ingress host: {{ (index .Values.ingress.hosts 0).host }}
+{{- end }}

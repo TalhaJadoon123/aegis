@@ -12,6 +12,7 @@ concurrency:
 
 permissions:
   contents: read
+  security-events: write
 
 jobs:
   verify:
@@ -217,12 +218,6 @@ jobs:
     runs-on: ubuntu-latest
     needs: verify
     timeout-minutes: 10
-    # upload-sarif writes code-scanning results, which the workflow-level
-    # `contents: read` token cannot do. Without this the job fails after the
-    # scan has already succeeded.
-    permissions:
-      contents: read
-      security-events: write
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-node@v4

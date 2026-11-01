@@ -17,7 +17,7 @@ One package, `@talhajadoon123/aegis`, with **zero runtime dependencies**. It con
 ```bash
 npm run package          # compile, stage, verify, pack
 npm run package:verify   # install into a temp dir and exercise it
-npm publish dist/talhajadoon123-aegis-0.1.1.tgz
+npm publish dist/talhajadoon123-aegis-0.1.2.tgz
 ```
 
 `npm run package` refuses to produce a tarball unless the staged package passes
@@ -73,14 +73,14 @@ The GitHub Release carries the same verified tarball, so no npm account or
 login is needed:
 
 ```bash
-npm install -g https://github.com/TalhaJadoon123/aegis/releases/download/v0.1.1/talhajadoon123-aegis-0.1.1.tgz
+npm install -g https://github.com/TalhaJadoon123/aegis/releases/download/v0.1.2/talhajadoon123-aegis-0.1.2.tgz
 aegis --version
 ```
 
 On Windows PowerShell:
 
 ```powershell
-npm install -g https://github.com/TalhaJadoon123/aegis/releases/download/v0.1.1/talhajadoon123-aegis-0.1.1.tgz
+npm install -g https://github.com/TalhaJadoon123/aegis/releases/download/v0.1.2/talhajadoon123-aegis-0.1.2.tgz
 aegis --version
 ```
 
@@ -89,7 +89,7 @@ aegis --version
 - [ ] `npm view @talhajadoon123/aegis` resolves once published
 - [ ] Confirm the tarball size (currently ~300 KB)
 - [ ] Confirm `npm install -g @talhajadoon123/aegis` puts a working `aegis` on PATH
-- [ ] Tag the release: `git tag v0.1.1`
+- [ ] Tag the release: `git tag v0.1.2`
 - [ ] Add the integrity hash to the release notes
 
 ## Registry
@@ -98,7 +98,7 @@ The unscoped name `aegis` is already owned by an unrelated project, so this
 package ships under the `@talhajadoon123` scope:
 
 ```bash
-npm publish dist/talhajadoon123-aegis-0.1.1.tgz --access public --registry https://registry.npmjs.org
+npm publish dist/talhajadoon123-aegis-0.1.2.tgz --access public --registry https://registry.npmjs.org
 ```
 
 ## Licence

@@ -34,15 +34,19 @@ jobs:
           registry-url: https://registry.npmjs.org
           cache: 'npm'
 
-      - name: Verify tag matches package.json
+      - name: Resolve and verify the release version
+        id: version
+        env:
+          INPUT_VERSION: ${{ inputs.version }}
         run: |
-          TAG_VERSION="${GITHUB_REF_NAME#v}"
-          PKG_VERSION=$(node -p "require('./package.json').version")
-          if [ "$TAG_VERSION" != "$PKG_VERSION" ]; then
-            echo "Tag version ($TAG_VERSION) does not match package.json version ($PKG_VERSION)"
-            exit 1
-          fi
-          echo "Version matches: $PKG_VERSION"
+          # On a tag push the ref is `v0.1.2`; a manual dispatch passes the
+          # version explicitly. Either way the release version is bare.
+          RAW="${INPUT_VERSION:-${GITHUB_REF_NAME}}"
+          VERSION="${RAW#v}"
+          echo "version=$VERSION" >> "$GITHUB_OUTPUT"
+          # Fails if any manifest, constant, chart value, installer or doc
+          # still points at a previous release.
+          npm run check:versions -- "$VERSION"
 
       - name: Install TypeScript for typechecking
         run: npm install --no-save --no-audit --no-fund typescript@5.7.2
@@ -75,7 +79,7 @@ jobs:
       - name: Create GitHub Release
         uses: softprops/action-gh-release@v2
         with:
-          tag_name: ${{ github.ref_name }}
+          tag_name: v${{ steps.version.outputs.version }}
           name: Aegis ${{ github.ref_name }}
           body_path: CHANGELOG.md
           files: |
@@ -88,6 +92,74 @@ jobs:
           prerelease: false
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+      # The workflow token is scoped to this repository and has packages:write,
+      # so the image can be published to GHCR without a personal access token.
+      # This runs after the release so a registry hiccup cannot prevent the
+      # tarball, chart and SBOM from shipping.
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
+
+      - name: Log in to GHCR
+        uses: docker/login-action@v3
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Build and push the image
+        uses: docker/build-push-action@v6
+        with:
+          context: .
+          file: infra/sandbox/Dockerfile
+          push: true
+          # The bare-version tag is the one the Helm chart defaults to
+          # (`image.tag`), so `helm install` works without overriding it. The
+          # `v`-prefixed tag matches the GitHub release for humans.
+          tags: |
+            ghcr.io/talhajadoon123/aegis:${{ steps.version.outputs.version }}
+            ghcr.io/talhajadoon123/aegis:${{ github.ref_name }}
+            ghcr.io/talhajadoon123/aegis:latest
+          labels: |
+            org.opencontainers.image.source=https://github.com/TalhaJadoon123/aegis
+            org.opencontainers.image.version=${{ steps.version.outputs.version }}
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
+
+      - name: Smoke test the pushed image
+        run: |
+          set -euo pipefail
+          IMAGE="ghcr.io/talhajadoon123/aegis:${{ steps.version.outputs.version }}"
+
+          docker run --rm "$IMAGE" --version
+
+          # The dashboard is what `helm install` runs, and a broken asset path
+          # once made it serve 404 for its own index.html. Prove the image
+          # actually serves the UI, not just that the binary prints a version.
+          docker run -d --name aegis-smoke -p 18080:8080 \
+            -e AEGIS_DASHBOARD_TOKEN=release-smoke \
+            "$IMAGE" desktop --no-open --host 0.0.0.0 --port 8080 --data /tmp/aegis
+
+          trap 'docker rm -f aegis-smoke >/dev/null 2>&1 || true' EXIT
+
+          for attempt in $(seq 1 30); do
+            if curl -fsS http://127.0.0.1:18080/healthz >/dev/null 2>&1; then break; fi
+            sleep 1
+          done
+
+          echo '--- /healthz ---'
+          curl -fsS http://127.0.0.1:18080/healthz
+          echo
+          echo '--- / (dashboard UI) ---'
+          curl -fsS -o /dev/null -w 'status=%{http_code} type=%{content_type}\n' \
+            http://127.0.0.1:18080/
+          curl -fsS http://127.0.0.1:18080/ | grep -qi '<title>' \
+            || { echo 'dashboard index.html has no <title>'; exit 1; }
+          echo '--- /app.css ---'
+          curl -fsS -o /dev/null -w 'status=%{http_code} type=%{content_type}\n' \
+            http://127.0.0.1:18080/app.css
+          echo '--- /metrics ---'
+          curl -fsS http://127.0.0.1:18080/metrics | head -5
 
       - name: Check npm credentials
         id: npm

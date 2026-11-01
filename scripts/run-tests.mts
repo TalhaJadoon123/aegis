@@ -31,7 +31,11 @@ function testFiles(dir) {
     .map((f) => `${dir}/${f}`);
 }
 
-const ALL = [...testFiles('packages/core/test'), ...testFiles('packages/intel-feeds/test')];
+const ALL = [
+  ...testFiles('packages/core/test'),
+  ...testFiles('packages/intel-feeds/test'),
+  ...testFiles('packages/web/test'),
+];
 // The end-to-end suite spawns the binary; it is excluded from the fast path.
 const E2E = ['packages/core/test/e2e.test.ts'];
 const UNIT = ALL.filter((f) => !E2E.includes(f));

@@ -52,4 +52,4 @@ LABEL org.opencontainers.image.title="Aegis" \
       org.opencontainers.image.description="The security platform for AI agents" \
       org.opencontainers.image.licenses="MIT" \
       org.opencontainers.image.source="https://github.com/TalhaJadoon123/aegis" \
-      org.opencontainers.image.version="0.1.1"
+      org.opencontainers.image.version="0.1.2"

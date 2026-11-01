@@ -33,6 +33,11 @@ jobs:
       - name: Typecheck
         run: npm run typecheck
 
+      # The version is duplicated across manifests, constants, the chart and the
+      # installers; drift breaks the download URL or the chart's image tag.
+      - name: Release metadata is consistent
+        run: npm run check:versions
+
       # The runner discovers test files itself, so a new test file cannot be
       # silently omitted from the pipeline -- which is how three suites went
       # missing from `npm test` before.
@@ -165,7 +170,7 @@ jobs:
         uses: docker/setup-buildx-action@v3
 
       - name: Build Aegis Docker image
-        uses: docker/build-push-action@v5
+        uses: docker/build-push-action@v6
         with:
           context: .
           file: infra/sandbox/Dockerfile
@@ -178,6 +183,34 @@ jobs:
         run: |
           docker run --rm aegis:latest --version
           docker run --rm aegis:latest --help
+
+      # `helm install` runs the dashboard, so the image must serve it. This was
+      # once broken: the server looked for index.html inside the scan-data
+      # directory and returned 404 for its own UI.
+      - name: Test the dashboard serves from the image
+        run: |
+          set -euo pipefail
+          docker run -d --name aegis-ci -p 18080:8080 \
+            -e AEGIS_DASHBOARD_TOKEN=ci-smoke \
+            aegis:latest desktop --no-open --host 0.0.0.0 --port 8080 --data /tmp/aegis
+
+          trap 'docker rm -f aegis-ci >/dev/null 2>&1 || true' EXIT
+
+          for attempt in $(seq 1 30); do
+            if curl -fsS http://127.0.0.1:18080/healthz >/dev/null 2>&1; then break; fi
+            sleep 1
+          done
+
+          echo '--- /healthz ---'
+          curl -fsS http://127.0.0.1:18080/healthz
+          echo
+          echo '--- / (dashboard UI) ---'
+          curl -fsS http://127.0.0.1:18080/ | grep -qi '<title>'
+          echo '--- /app.css ---'
+          curl -fsS -o /dev/null -w 'status=%{http_code} type=%{content_type}\n' \
+            http://127.0.0.1:18080/app.css
+          echo '--- /metrics ---'
+          curl -fsS http://127.0.0.1:18080/metrics | head -3
 
   self-scan:
     name: Aegis scans itself

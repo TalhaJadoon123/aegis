@@ -7,6 +7,28 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ---
 
+## [0.1.2] - 2026-11-01
+
+### Fixed
+- **Dashboard UI returned 404 for every page.** Static assets were resolved
+  inside the scan-data directory (`<data> /public`) instead of the package's
+  own `packages/web/public`, so `/` and `/app.css` were missing and the window
+  opened by `aegis desktop` was blank. Assets now resolve relative to the
+  server module, with an explicit `assetDir` override.
+- `--port 0` now reports the port the OS assigned instead of `0`.
+- The "no dashboard token" message no longer claims the server is loopback-only
+  when it was explicitly bound to another interface.
+- The red-team script-target test retries a process spawn instead of failing
+  under load.
+
+### Added
+- Five dashboard tests covering the UI, stylesheet, scan API, readiness and
+  Prometheus metrics.
+- `npm run version:bump -- <version>` so every manifest, constant, chart,
+  installer and download URL moves together.
+- `Start-Aegis.cmd` (double-click launcher) and `docs/START-HERE.md` for
+  non-technical users.
+
 ## [0.1.1] - 2026-10-24
 
 ### Added

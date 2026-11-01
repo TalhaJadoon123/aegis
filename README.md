@@ -53,7 +53,7 @@ and if you are deploying this into a customer network you already know it.
 **Option 1 — install the verified release tarball** (no npm account needed):
 
 ```bash
-npm install -g https://github.com/TalhaJadoon123/aegis/releases/download/v0.1.1/talhajadoon123-aegis-0.1.1.tgz
+npm install -g https://github.com/TalhaJadoon123/aegis/releases/download/v0.1.2/talhajadoon123-aegis-0.1.2.tgz
 aegis --version
 ```
 
@@ -68,12 +68,12 @@ node packages/cli/src/bin.ts --version
 **Option 3 — container:**
 
 ```bash
-docker build -t aegis:0.1.1 -f infra/sandbox/Dockerfile .
-docker run --rm -v "$PWD:/workspace:ro" aegis:0.1.1 scan /workspace
+docker build -t aegis:0.1.2 -f infra/sandbox/Dockerfile .
+docker run --rm -v "$PWD:/workspace:ro" aegis:0.1.2 scan /workspace
 ```
 
 On Windows PowerShell the equivalent is
-`docker run --rm -v "${PWD}:/workspace:ro" aegis:0.1.1 scan /workspace`.
+`docker run --rm -v "${PWD}:/workspace:ro" aegis:0.1.2 scan /workspace`.
 
 Requires Node 22 or later (for native TypeScript execution).
 

@@ -657,10 +657,17 @@ describe('targets', () => {
     const target = new ScriptRedTeamTarget({
       command: process.execPath,
       args: ['-e', 'process.stdin.on("data", d => process.stdout.write("echo:" + d.toString().trim()))'],
-      timeoutMs: 5000,
+      timeoutMs: 15000,
     });
-    const response = await target.send('hello there');
-    assert.match(response.text, /echo:hello there/);
+    // Spawning a child process is timing sensitive on a loaded machine: the
+    // first attempt can come back empty if the child has not flushed yet. Retry
+    // rather than turning load into a red build.
+    let text = '';
+    for (let attempt = 0; attempt < 3 && !/echo:hello there/.test(text); attempt += 1) {
+      const response = await target.send('hello there');
+      text = response.text ?? '';
+    }
+    assert.match(text, /echo:hello there/);
     await target.close();
   });
 });

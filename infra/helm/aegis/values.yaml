@@ -6,7 +6,7 @@ replicaCount: 1
 image:
   repository: ghcr.io/talhajadoon123/aegis
   pullPolicy: IfNotPresent
-  tag: "0.1.1"
+  tag: "0.1.2"
 
 imagePullSecrets: []
 nameOverride: ""

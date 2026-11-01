@@ -1,6 +1,6 @@
 {
   "name": "aegis-monorepo",
-  "version": "0.1.1",
+  "version": "0.1.2",
   "private": true,
   "type": "module",
   "description": "Aegis — The security platform for AI agents.",
@@ -24,8 +24,10 @@
     "package": "node --experimental-strip-types --import ./tools/register-ts.mjs scripts/build-package.mts",
     "package:verify": "node --experimental-strip-types --import ./tools/register-ts.mjs scripts/verify-package.mts",
     "sbom": "node --experimental-strip-types scripts/sbom.mts",
+    "version:bump": "node --experimental-strip-types scripts/bump-version.mts",
+    "check:versions": "node --experimental-strip-types scripts/check-versions.mts",
     "typecheck": "tsc --noEmit -p packages/core/tsconfig.json",
-    "verify": "npm run typecheck && npm run test:all && npm run smoke && npm run readiness",
+    "verify": "npm run check:versions && npm run typecheck && npm run test:all && npm run smoke && npm run readiness",
     "dashboard": "node --experimental-strip-types --import ./tools/register-ts.mjs packages/web/src/bin.mts --data .aegis/dashboard --port 8080",
     "clean": "node --experimental-strip-types --import ./tools/register-ts.mjs scripts/clean.mts"
   },

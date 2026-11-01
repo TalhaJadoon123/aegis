@@ -25,6 +25,8 @@ export interface DashboardOptions {
   host?: string;
   /** Shared bearer token. When unset, the dashboard binds to loopback only. */
   token?: string;
+  /** Directory containing the dashboard's static assets (index.html, app.css). */
+  assetDir?: string;
   logger?: { info(m: string): void; warn(m: string): void; error(m: string): void };
 }
 
@@ -39,13 +41,42 @@ export interface ScanRecord {
   artifacts?: Record<string, unknown>;
 }
 
+/**
+ * Find the directory that holds `index.html` and `app.css`.
+ *
+ * Three layouts exist, and a single relative path cannot cover them all:
+ *   source      packages/web/src/server.ts               -> ../public
+ *   published   build/publish/packages/web/src/server.js -> ../../../../../packages/web/public
+ *   legacy      <data>/public/index.html
+ *
+ * The published tarball keeps `packages/web/public` at the package root while
+ * the compiled server lives under `build/publish`, so the depth differs from
+ * the source tree. Check every known layout in order and fall back to the
+ * source path, which is where the file is when running from git.
+ */
+export function resolveAssetDir(moduleDir: string, dataDir: string, explicit?: string): string {
+  const candidates = explicit
+    ? [explicit]
+    : [
+        join(moduleDir, '..', 'public'),
+        join(moduleDir, '..', '..', '..', '..', '..', 'packages', 'web', 'public'),
+        join(dataDir, 'public'),
+      ];
+
+  for (const candidate of candidates) {
+    if (existsSync(join(candidate, 'index.html'))) return resolve(candidate);
+  }
+  return resolve(candidates[0]!);
+}
+
 export class Dashboard {
   private readonly dataDir: string;
-  private readonly port: number;
+  private port: number;
   private readonly host: string;
   private readonly token: string | undefined;
   private readonly logger: DashboardOptions['logger'];
   private readonly audit: AuditLogger;
+  private readonly assetDir: string;
   /** Held so the server can be stopped; a bare listen keeps the process alive. */
   private server: import('node:http').Server | null = null;
 
@@ -55,9 +86,14 @@ export class Dashboard {
     this.token = options.token ?? process.env['AEGIS_DASHBOARD_TOKEN'];
     // Without a token the dashboard must not be exposed: it shows findings,
     // evidence, and file paths.
-    this.host = options.host ?? (this.token ? '127.0.0.1' : '127.0.0.1');
+    this.host = options.host ?? '127.0.0.1';
     this.logger = options.logger;
     this.audit = new AuditLogger(join(this.dataDir, '..', 'audit'));
+    this.assetDir = resolveAssetDir(
+      dirname(fileURLToPath(import.meta.url)),
+      this.dataDir,
+      options.assetDir,
+    );
   }
 
   async start(): Promise<{ url: string; port: number }> {
@@ -77,10 +113,22 @@ export class Dashboard {
     });
     this.server = server;
 
+    // Port 0 asks the OS for a free port; report the one it actually chose so
+    // tests and `--port 0` callers can connect.
+    const address = server.address();
+    if (address && typeof address === 'object') {
+      this.port = address.port;
+    }
+
     const url = `http://${this.host}:${this.port}`;
     this.logger?.info(`Aegis dashboard listening on ${url}`);
     if (!this.token) {
-      this.logger?.info('no AEGIS_DASHBOARD_TOKEN set; bound to loopback only');
+      const loopback = this.host === '127.0.0.1' || this.host === 'localhost' || this.host === '::1';
+      this.logger?.info(
+        loopback
+          ? 'no AEGIS_DASHBOARD_TOKEN set; bound to loopback only'
+          : `no AEGIS_DASHBOARD_TOKEN set; ${this.host} is reachable without authentication`,
+      );
     }
     return { url, port: this.port };
   }
@@ -214,7 +262,7 @@ export class Dashboard {
       send(res, 400, 'text/plain', 'bad request');
       return;
     }
-    const file = join(this.dataDir, 'public', asset);
+    const file = join(this.assetDir, asset);
     if (existsSync(file)) {
       const content = await readFile(file);
       send(res, 200, contentType(extname(file)), content);

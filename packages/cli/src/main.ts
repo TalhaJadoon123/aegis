@@ -40,7 +40,7 @@ import { SEED_ATTACKS, seedGraph } from '../../core/src/intel/seed.js';
 import { fingerprintBehavior } from '../../core/src/sandbox/fingerprint.js';
 import { runSandbox } from '../../core/src/sandbox/runner.js';
 
-const VERSION = '0.1.1';
+const VERSION = '0.1.2';
 /** Repository root, resolved from this module so `--import`-style shims work. */
 /**
  * Repository root, resolved from this module.

@@ -2,7 +2,7 @@
 # Install Aegis. No npm account required; the package has zero dependencies.
 set -eu
 
-VERSION="${AEGIS_VERSION:-0.1.1}"
+VERSION="${AEGIS_VERSION:-0.1.2}"
 ASSET="talhajadoon123-aegis-${VERSION}.tgz"
 URL="https://github.com/TalhaJadoon123/aegis/releases/download/v${VERSION}/${ASSET}"
 

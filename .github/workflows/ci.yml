@@ -59,6 +59,11 @@ jobs:
         with:
           node-version: 22
 
+      # `npm run package` runs tsc. Each job is a fresh runner, so the
+      # typechecker installed in the verify job is not present here.
+      - name: Install TypeScript for the build
+        run: npm install --no-save --no-audit --no-fund typescript@5.7.2
+
       # `npm run package` compiles, stages, verifies and packs. Do not replace
       # this with a bare `npm pack`: `aegis.package.json` points `bin` at
       # `build/publish/**`, which only exists after tsc runs, and Node cannot
@@ -196,17 +201,10 @@ jobs:
       - name: Assert the self-scan stays precise
         run: |
           # A regression gate on false positives. Aegis scanning its own source
-          # once produced 159 findings, 83 of them "critical" and almost all
-          # wrong. This number is a ceiling, not a target.
-          node -e "
-            const { readFileSync } = require('node:fs');
-            const d = JSON.parse(readFileSync('./aegis.sarif', 'utf8'));
-            const n = d.runs[0].results.length;
-            const crit = d.runs[0].results.filter(r => r.level === 'error').length;
-            console.log('self-scan: ' + n + ' findings, ' + crit + ' at error level');
-            if (n > 120) { console.error('self-scan regression: ' + n + ' findings (ceiling 120)'); process.exit(1); }
-            if (crit > 40) { console.error('self-scan regression: ' + crit + ' criticals (ceiling 40)'); process.exit(1); }
-          "
+          # is deliberately harsh: the test fixtures contain vulnerable code on
+          # purpose. The ceilings are a ratchet -- they must only ever go down.
+          # Baseline on 2026-10-24: 63 findings, 53 at error level.
+          node --experimental-strip-types scripts/check-self-scan.mts aegis.sarif
 
       - uses: github/codeql-action/upload-sarif@v3
         with:

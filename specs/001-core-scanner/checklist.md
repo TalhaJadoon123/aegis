@@ -157,7 +157,7 @@
 - [x] `specs/001-core-scanner/plan.md`
 - [x] `specs/001-core-scanner/tasks.md`
 - [x] `specs/001-core-scanner/checklist.md` (this file)
-- [ ] `/speckit.checklist` gate in CI
+- [x] `/speckit.checklist` gate in CI
 
 ---
 

@@ -117,7 +117,7 @@
 - [x] `specs/003-compliance/plan.md`
 - [x] `specs/003-compliance/tasks.md`
 - [x] `specs/003-compliance/checklist.md` (this file)
-- [ ] `/speckit.checklist` gate in CI
+- [x] `/speckit.checklist` gate in CI
 
 ---
 

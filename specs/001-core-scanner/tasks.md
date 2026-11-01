@@ -226,7 +226,7 @@ graph TD
 - [x] `specs/003-compliance/plan.md` (next)
 - [ ] `tasks.md` for each spec
 - [ ] `checklist.md` for each spec
-- [ ] `/speckit.checklist` gate in CI
+- [x] `/speckit.checklist` gate in CI
 
 ---
 

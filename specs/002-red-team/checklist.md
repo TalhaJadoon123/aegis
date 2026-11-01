@@ -140,7 +140,7 @@
 - [x] `specs/002-red-team/plan.md`
 - [x] `specs/002-red-team/tasks.md`
 - [x] `specs/002-red-team/checklist.md` (this file)
-- [ ] `/speckit.checklist` gate in CI
+- [x] `/speckit.checklist` gate in CI
 
 ---
 

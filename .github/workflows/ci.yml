@@ -12,7 +12,6 @@ concurrency:
 
 permissions:
   contents: read
-  security-events: write
 
 jobs:
   verify:
@@ -239,8 +238,3 @@ jobs:
           # purpose. The ceilings are a ratchet -- they must only ever go down.
           # Baseline on 2026-10-24: 63 findings, 53 at error level.
           node --experimental-strip-types scripts/check-self-scan.mts aegis.sarif
-
-      - uses: github/codeql-action/upload-sarif@v3
-        with:
-          sarif_file: aegis.sarif
-          category: aegis-self-scan

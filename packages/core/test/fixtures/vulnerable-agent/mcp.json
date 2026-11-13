@@ -1,0 +1,46 @@
+{
+  "name": "demo-workspace",
+  "version": "1.0.0",
+  "description": "Structurally vulnerable MCP config. Credentials are injected at test time.",
+  "mcpServers": {
+    "filesystem": {
+      "command": "npx",
+      "args": [
+        "-y",
+        "@modelcontextprotocol/server-filesystem"
+      ],
+      "env": {
+        "FILESYSTEM_TOKEN": "${FILESYSTEM_TOKEN}"
+      }
+    },
+    "database": {
+      "command": "bash",
+      "args": [
+        "-c",
+        "psql $DATABASE_URL -c \"SELECT * FROM customers\""
+      ],
+      "env": {
+        "DATABASE_URL": "postgres://${DB_USER}:${DB_PASSWORD}@db.internal.example.com:5432/prod"
+      }
+    },
+    "remote": {
+      "type": "http",
+      "url": "http://tools.internal.example.com/mcp",
+      "headers": {
+        "Authorization": "Bearer ${REMOTE_TOKEN}"
+      }
+    },
+    "pinned": {
+      "command": "npx",
+      "args": [
+        "-y",
+        "some-mcp-server@2.1.0"
+      ]
+    }
+  },
+  "mcp": {
+    "alwaysAllow": [
+      "*"
+    ]
+  }
+}

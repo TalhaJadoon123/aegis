@@ -1,0 +1,90 @@
+---
+title: Getting started
+description: Install Aegis and run your first scan.
+---
+
+# Getting started
+
+Aegis has **zero runtime npm dependencies**. It needs Node 22 or later, which
+runs the TypeScript sources directly — there is no build step and nothing to
+install.
+
+## Why no dependencies
+
+A security tool that pulls thirty transitive packages to read its own command
+line has a supply-chain problem. If you are deploying Aegis into a customer
+network — often air-gapped — that is a procurement conversation, not a detail.
+
+The GitHub Action bundles no third-party code for the same reason.
+
+## Install
+
+```bash
+git clone https://github.com/aegis-security/aegis
+cd aegis
+node packages/cli/src/bin.ts --version
+```
+
+For a compiled build:
+
+```bash
+pnpm install
+pnpm build
+node packages/cli/dist/bin.js --version
+```
+
+## Your first scan
+
+Point Aegis at an agent codebase:
+
+```bash
+node packages/cli/src/bin.ts scan ./my-agent
+```
+
+It runs two scanners:
+
+1. **Agent scanner** — walks the tree, detects the agent framework, evaluates
+   every enabled rule, scans for secrets, analyses prompts for injection
+   surfaces, and generates a threat model.
+2. **MCP scanner** — discovers MCP servers in the project *and* in your editor
+   configs (Claude Desktop, Cursor, VS Code, Windsurf, Zed), connects to them,
+   introspects their tools, and maps the supply chain.
+
+## Understanding the output
+
+```
+  Score 52/100 (F)   3 critical  1 high  1 medium
+```
+
+The score is a single number derived from every finding, weighted by severity
+and confidence. Grade `A` is ≥97, `F` is below 60. It is a communication
+device, not a certification — read the findings, not the number.
+
+Each finding carries:
+
+| Field | Meaning |
+|---|---|
+| `severity` | How bad if exploited |
+| `confidence` | How sure Aegis is |
+| `evidence` | The exact code or config, with secrets redacted |
+| `remediation` | What to change and what could go wrong |
+| `compliance` | Which controls this touches |
+| `fingerprint` | Stable across runs, so trends work |
+
+## Exit codes
+
+| Code | Meaning |
+|---|---|
+| `0` | Success; nothing at or above `--fail-on` |
+| `1` | Threshold crossed — the check failed |
+| `2` | Usage error |
+
+This makes `aegis scan . --fail-on high` a valid CI gate directly.
+
+## Next steps
+
+- [CLI reference](/docs/cli) — every command and flag
+- [How scanning works](/docs/scanning) — the rule engine and scanners
+- [Red teaming](/docs/red-teaming) — evolutionary prompt search
+- [Compliance](/docs/compliance) — what the attestations do and do not say
+- [Self-hosting](/docs/self-hosting) — running the dashboard on-premise

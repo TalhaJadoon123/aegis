@@ -1,0 +1,168 @@
+---
+title: How scanning works
+description: The rule engine, the scanners, and how findings are produced.
+---
+
+# How scanning works
+
+Every Aegis scanner implements one interface:
+
+```ts
+interface Scanner {
+  readonly name: string;
+  readonly targetType: 'mcp' | 'agent' | 'runtime' | 'repo';
+  readonly sideEffects: 'none' | 'local-exec' | 'network';
+  scan(target: ScanTarget, ctx: ScannerContext): AsyncIterable<Finding>;
+}
+```
+
+Findings are **streamed**, not buffered. On a large repository that keeps memory
+flat, lets the CLI render results as they are discovered, and means a scanner
+that fails at the end does not discard everything before it.
+
+Errors are isolated per scanner: a broken plugin cannot hide findings produced
+by the scanner that ran before it.
+
+## The rule engine
+
+Rules are YAML, so a security engineer can review and fork them without reading
+TypeScript. Six packs ship with Aegis:
+
+| Pack | Rules | Scope |
+|---|---|---|
+| `owasp-agentic-top10` | 40 | ASI01–ASI10 |
+| `mcp-security` | 24 | Transport, tools, poisoning, exfiltration |
+| `prompt-injection` | 8 | Injection-prone prompts, output handling |
+| `supply-chain` | 6 | Dependency, model, plugin provenance |
+| `secrets` | 6 | Credentials, entropy, PII |
+| `general-code-security` | 8 | Classic vulns at agent severity |
+
+### Pattern types
+
+```yaml
+patterns:
+  - type: regex          # RE2-ish; PCRE-style (?i) flags are hoisted
+    pattern: 'subprocess\.(run|call)\([^)]*shell\s*=\s*True'
+  - type: literal        # exact substring
+    value: 'trust_remote_code'
+  - type: contains-all   # all substrings present
+    values: ['read_file', 'fetch']
+  - type: contains-any
+    values: ['ignore previous', 'DAN mode']
+  - type: call           # callee(...) with argument constraints
+    callee: requests.post
+    argsContain: ['refund']
+    argsNotContain: ['timeout']
+  - type: assignment     # `var = <value matching regex>`
+    variable: shell
+    valueMatches: 'True'
+  - type: jsonpath       # for JSON configs
+    path: '$.mcpServers.*.command'
+    operator: equals     # equals | not-equals | exists | contains
+    value: bash
+  - type: entropy        # shannon entropy sweep
+    min: 4.3
+```
+
+`requires` and `unless` are regexes evaluated against the whole file. A rule
+fires only when every `requires` matches and no `unless` matches.
+
+### One rule, distinct problems
+
+A rule covering several behaviours (`shell=True` *and* `os.popen` are both
+ASI02-001) reports each **separately** — they are different bugs with different
+fixes, and merging them hides one. Repeated matches of the *same* pattern
+collapse into one finding with an occurrence list.
+
+## Placeholder suppression
+
+Suppression is applied to the **matched text**, not the whole file. This matters:
+a guard pattern like `1234` appears *inside* genuine keys
+(`sk-proj-...xyz1234`), and testing the whole file against the guard suppressed
+every real finding in the test corpus. Aegis tests the match, so placeholders are
+excluded without letting them mask credentials.
+
+## MCP scanner
+
+Two passes, because they answer different questions:
+
+- **Config pass** (always) — what the machine will execute. Unpinned installs,
+  shell wrappers, inline credentials, plaintext transports. Works with servers
+  switched off, which is how most people run this in CI.
+- **Introspection pass** (when `--no-connect` is absent) — what the server
+  actually exposes. The only way to see tool poisoning, because a poisoned
+  description is invisible in the config file; it arrives over the wire.
+
+Aegis implements the MCP wire protocol directly rather than through the SDK, so
+a scan never inherits the SDK's own runtime behaviour.
+
+### Tool poisoning detection
+
+Tool descriptions get a **dedicated** analysis vocabulary — tool-ordering
+demands, concealment instructions, credential coercion — because "call this tool
+first" and "do not tell the user" are attack markers in an MCP schema and merely
+bad writing in a system prompt.
+
+### Exfiltration detection
+
+Read→egress edges are drawn at **server scope**, not per tool. A malicious
+server splits its file reader and its HTTP poster into two tools precisely so
+neither looks dangerous alone. The graph connects them, and the scanner reports
+the chain.
+
+## Agent scanner
+
+Three detection strategies, because each catches a different class:
+
+1. **Rule packs** — broad, auditable, reviewable by non-programmers.
+2. **Vendor-specific secret detection** — precision-critical, so it lives in
+   code where it can be tuned against real false positives.
+3. **Structural prompt analysis** — issues that exist only in agent systems and
+   are invisible to general SAST.
+
+Framework detection covers 16 frameworks (LangChain, LangGraph, LlamaIndex,
+CrewAI, AutoGen, OpenAI Agents, Anthropic, Vercel AI SDK, Mastra, MCP SDK, and
+more) and requires both an import *and* API usage, so a transitive dependency in
+a lockfile is not mistaken for a framework in use.
+
+### Secrets
+
+Two complementary strategies: vendor-prefix patterns (high precision) and an
+entropy sweep (catches first-party tokens with no known prefix).
+
+A denylist of placeholders keeps precision usable — without it the
+signal-to-noise ratio collapses and teams switch the scanner off, which is worse
+than not shipping it.
+
+**Raw values are never retained.** Not in the finding, not in the evidence, not
+in any output format.
+
+## Writing rules
+
+Fork `packages/rules` — it is CC0, public domain.
+
+```yaml
+- id: ACME-001
+  title: Internal data must not reach an external model
+  description: Company data must not be sent to third-party inference providers.
+  severity: high
+  confidence: high
+  patterns:
+    - type: call
+      callee: openai.ChatCompletion.create
+  remediation:
+    title: Use the internal gateway
+    description: Route inference through gw.internal.acme/v1.
+    automated: false
+    effort: low
+  compliance:
+    - framework: gdpr
+      control: Art. 44
+      relevant: true
+```
+
+Validate with:
+
+```bash
+node --import ./tools/register-ts.mjs --test packages/core/test/yaml.test.ts
+```

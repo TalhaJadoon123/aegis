@@ -1,0 +1,37 @@
+{
+  "name": "aegis-monorepo",
+  "version": "0.1.0",
+  "private": true,
+  "description": "Aegis — The security platform for AI agents.",
+  "license": "MIT",
+  "packageManager": "pnpm@9.15.0",
+  "engines": {
+    "node": ">=22.0.0"
+  },
+  "bin": {
+    "aegis": "./bin/aegis.mts"
+  },
+  "workspaces": [
+    "packages/*"
+  ],
+  "scripts": {
+    "aegis": "node --import ./tools/register-ts.mjs packages/cli/src/bin.ts",
+    "test": "node scripts/run-tests.mts unit",
+    "test:unit": "node scripts/run-tests.mts unit",
+    "test:e2e": "node scripts/run-tests.mts e2e",
+    "test:all": "node scripts/run-tests.mts all",
+    "smoke": "node --import ./tools/register-ts.mjs scripts/smoke.mts",
+    "readiness": "node --import ./tools/register-ts.mjs scripts/readiness.mts",
+    "demo-data": "node --import ./tools/register-ts.mjs scripts/demo-data.mts",
+    "package": "node --import ./tools/register-ts.mjs scripts/build-package.mts",
+    "package:verify": "node --import ./tools/register-ts.mjs scripts/verify-package.mts",
+    "typecheck": "tsc --noEmit -p packages/core/tsconfig.json",
+    "verify": "npm run typecheck && npm run test:all && npm run smoke && npm run readiness",
+    "dashboard": "node --import ./tools/register-ts.mjs packages/web/src/bin.mts --data .aegis/dashboard --port 8080",
+    "clean": "node scripts/clean.mts"
+  },
+  "devDependencies": {
+    "@types/node": "^22.10.2",
+    "typescript": "^5.7.2"
+  }
+}

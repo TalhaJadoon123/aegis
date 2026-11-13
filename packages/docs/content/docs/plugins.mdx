@@ -1,0 +1,252 @@
+---
+title: Plugins
+description: Extending Aegis with custom rules, scanners, and feed parsers.
+---
+
+# Plugins
+
+Aegis has two extension points: **rule packs** (declarative, no code) and
+**scanners** (TypeScript). Start with rules.
+
+---
+
+## Rule packs
+
+A rule pack is a YAML file. No code, no build step.
+
+```yaml
+id: acme-internal
+version: 1.0.0
+name: Acme internal rules
+description: Organisation-specific agent security policy.
+
+rules:
+  - id: ACME-001
+    title: Internal data must not reach an external model
+    description: >
+      Company data must not be sent to third-party inference providers.
+      Route all inference through the internal gateway at gw.internal.acme.
+    severity: high
+    confidence: high
+    languages: [python, typescript]
+    scanners: [agent]
+    taxonomy: ASI02
+    cwe: CWE-201
+    tags: [data-governance, internal]
+    patterns:
+      - type: call
+        callee: openai.ChatCompletion.create
+    unless:
+      - '(?i)gw\.internal\.acme'
+    remediation:
+      title: Route inference through the internal gateway
+      description: Replace the OpenAI client with GatewayClient from @acme/ai.
+      automated: false
+      effort: low
+      patch: |
+        # before
+        openai.ChatCompletion.create(model="gpt-4", messages=msgs)
+        # after
+        GatewayClient("gw.internal.acme").complete(model="llama-70b", messages=msgs)
+    compliance:
+      - framework: gdpr
+        control: Art. 44
+        title: Transfers to third countries
+        relevant: true
+      - framework: soc2
+        control: CC6.7
+        relevant: false
+    references:
+      - https://wiki.internal.acme/ai-policy
+```
+
+### Pattern types
+
+| Type | Fields | Matches |
+|---|---|---|
+| `regex` | `pattern`, `flags?` | JavaScript regex, `gm` by default |
+| `literal` | `value` | exact substring |
+| `contains-all` | `values` | every substring present |
+| `contains-any` | `values` | any substring present |
+| `call` | `callee`, `argsContain?`, `argsNotContain?` | `callee(...)` with argument constraints |
+| `assignment` | `variable`, `valueMatches` | `var = <value matching regex>` |
+| `jsonpath` | `path`, `operator`, `value?` | `$.a.b[0].c` against JSON configs |
+| `entropy` | `min`, `pattern?` | high-entropy strings (secret sweep) |
+
+**`call` understands nesting and quoting**, so `subprocess.run(cmd, shell=True)`
+resolves the argument list correctly even with nested parentheses and strings.
+
+### Guards
+
+```yaml
+requires:      # every pattern must match
+  - '(?i)requests\.get'
+unless:        # no pattern may match
+  - '(?i)localhost|127\.0\.0\.1'
+```
+
+`unless` is evaluated against the whole file, so keep the patterns specific.
+A bare `log` matches `logging`; a bare `restrict` matches "no root
+restriction". Use anchored forms.
+
+### jsonpath
+
+```yaml
+patterns:
+  - type: jsonpath
+    path: '$.mcpServers.*.command'
+    operator: equals        # equals | not-equals | exists | contains
+    value: bash
+```
+
+Only applies to JSON files. The parser tolerates comments and trailing commas.
+
+### Using your pack
+
+```bash
+aegis scan . --rules ./acme-rules/security.yaml
+aegis scan . --rule-dir ./acme-rules
+```
+
+`--rule-dir` loads every `*.yaml` in the directory and replaces the shipped
+packs. `--rules` accepts specific files.
+
+### Validation
+
+Aegis validates packs at load time and refuses malformed ones:
+
+- Rule IDs must match `AEGIS-<AREA>-<NNN>` (or your own prefix, 3+ chars)
+- Regexes must compile and are checked for nested quantifiers (ReDoS)
+- Severity and confidence must be from the allowed sets
+- Every rule needs a title, a description, at least one pattern, remediation,
+  and compliance mapping
+- Duplicate IDs across packs are rejected with the conflicting IDs named
+
+Invalid packs are reported and skipped; with `strict: true` they throw.
+
+---
+
+## Scanners
+
+A scanner implements one interface:
+
+```ts
+interface Scanner<TOptions = unknown> {
+  readonly name: string;
+  readonly targetType: 'mcp' | 'agent' | 'runtime' | 'repo';
+  readonly sideEffects: 'none' | 'local-exec' | 'network';
+  readonly options?: TOptions;
+  scan(target: ScanTarget, ctx: ScannerContext): AsyncIterable<Finding>;
+}
+```
+
+**Return findings streamed.** Buffering defeats the memory profile on large
+repositories and breaks live rendering. Use `scanToReport()` only when you
+genuinely need the whole picture.
+
+```ts
+import type { Scanner, ScanTarget, ScannerContext, Finding } from '@aegis/core';
+
+export const IaCScanner: Scanner = {
+  name: 'iac',
+  targetType: 'repo',
+  sideEffects: 'none',
+
+  async *scan(target: ScanTarget, ctx: ScannerContext): AsyncIterable<Finding> {
+    for await (const line of readLines(target.path, /\.(tf|ya?ml)$/)) {
+      const finding = evaluate(line);
+      if (finding) yield finding;
+      if (ctx.signal?.aborted) return;
+    }
+  },
+};
+```
+
+### Registering
+
+```ts
+import type { AegisPlugin } from '@aegis/core';
+
+export const acmePlugin: AegisPlugin = {
+  name: 'acme',
+  version: '1.0.0',
+  description: 'Acme internal scanners and rules',
+  capabilities: { filesystem: true, network: false, spawn: false },
+  rulePacks: [acmeRules],
+  scanners: [IaCScanner],
+};
+```
+
+`capabilities` is advisory: Aegis logs what a plugin requests before running
+it, so an operator can see a plugin widening the blast radius.
+
+---
+
+## Feed parsers
+
+Extend threat intelligence with an ingestion hook:
+
+```ts
+import { addNode, addEdge, type AttackGraph } from '@aegis/core';
+
+export function ingestInternalFeed(graph: AttackGraph, feed: InternalFeed) {
+  for (const advisory of feed.advisories) {
+    const result = addNode(graph, {
+      kind: 'cve',
+      label: advisory.id,
+      description: advisory.summary,
+      severity: advisory.severity,
+      provenance: {
+        kind: 'advisory',
+        source: 'acme-internal',
+        observedAt: advisory.published,
+        hash: advisory.id,
+      },
+    });
+    if (result.status === 'rejected') continue;
+
+    for (const technique of advisory.techniques ?? []) {
+      const target = [...graph.nodes.values()].find((n) => n.label === technique);
+      if (!target) continue;
+      addEdge(graph, {
+        source: result.node.id,
+        target: target.id,
+        kind: 'exploits',
+        provenance: result.node.provenance[0]!,
+        // Machine-extracted relationships are hypotheses, not findings.
+        unverified: true,
+      });
+    }
+  }
+}
+```
+
+Every node and edge carries provenance. A relationship asserted by two
+independent sources clears its `unverified` flag automatically — that is what
+makes a living graph more trustworthy over time rather than merely larger.
+
+---
+
+## Testing plugins
+
+```ts
+import { test } from 'node:test';
+import assert from 'node:assert/strict';
+import { loadRulePacks } from '@aegis/core';
+
+test('pack loads', async () => {
+  const { packs, errors } = await loadRulePacks({ files: ['./acme.yaml'] });
+  assert.deepEqual(errors, []);
+  assert.equal(packs[0]!.rules.length, 12);
+});
+```
+
+Aegis's own test suite asserts that every shipped rule has a remediation over
+30 characters, a compliance mapping, and compiles. Match that bar in your pack
+— an internal rule that fires on every pull request will be disabled within a
+week.
+
+## Licence note
+
+`packages/rules` is CC0, so forking and contributing rules back is
+unrestricted by design. The engine is MIT.

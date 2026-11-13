@@ -1,0 +1,31 @@
+node_modules/
+dist/
+out/
+build/
+coverage/
+.turbo/
+.next/
+*.tsbuildinfo
+
+# env
+.env
+.env.local
+.env*.local
+!.env.example
+
+# runtime artifacts
+.aegis/
+aegis-report.*
+*.sarif
+*.log
+
+# editors / os
+.DS_Store
+Thumbs.db
+.idea/
+.vscode/*
+!.vscode/extensions.json
+
+# docker volumes
+pgdata/
+redisdata/

@@ -1,0 +1,24 @@
+{
+  "name": "@aegis/rules",
+  "version": "0.1.0",
+  "description": "Aegis YAML rule definitions for the OWASP Agentic Top 10, MCP and general code security.",
+  "license": "CC0-1.0",
+  "type": "module",
+  "main": "./index.js",
+  "exports": {
+    ".": "./index.js",
+    "./rules/*.yaml": "./rules/*.yaml",
+    "./package.json": "./package.json"
+  },
+  "files": ["rules", "index.js", "README.md"],
+  "scripts": {
+    "test": "node --import ../../tools/register-ts.mjs --test ../../packages/core/test/yaml.test.ts",
+    "lint": "echo \"[aegis/rules] nothing to lint\"",
+    "typecheck": "echo \"[aegis/rules] no TypeScript\"",
+    "build": "echo \"[aegis/rules] static assets, nothing to build\"",
+    "clean": "rimraf .turbo"
+  },
+  "devDependencies": {
+    "yaml": "^2.6.1"
+  }
+}

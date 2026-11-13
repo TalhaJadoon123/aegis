@@ -1,0 +1,20 @@
+build
+!dist
+dist/
+coverage/
+node_modules/
+*.tsbuildinfo
+
+# Aegis output
+.aegis/
+*.sarif
+aegis-supply-chain.html
+aegis-report.md
+
+# Published package metadata is generated from aegis.package.json
+/aegis-package.json
+
+# Editors
+.DS_Store
+.idea/
+*.swp

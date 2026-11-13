@@ -1,0 +1,96 @@
+# Aegis runtime profile.
+#
+# For running red-team attacks or behavioural observation against a target that
+# should not touch the host network or filesystem. `--sandbox` and
+# `aegis sandbox` both honour this.
+#
+# Usage:
+#   docker run --rm \
+#     --security-opt no-new-privileges:true \
+#     --cap-drop ALL \
+#     --read-only \
+#     --tmpfs /tmp:rw,noexec,nosuid,size=64m \
+#     --pids-limit 256 \
+#     --memory 512m \
+#     --cpus 1 \
+#     --network none \
+#     aegis redteam --dry-run
+
+services:
+  # Static analysis. No network required.
+  scanner:
+    build:
+      context: ..
+      dockerfile: infra/sandbox/Dockerfile
+    image: aegis
+    read_only: true
+    cap_drop: [ALL]
+    security_opt: ["no-new-privileges:true"]
+    tmpfs:
+      - /tmp:rw,noexec,nosuid,size=64m
+    pids_limit: 256
+    mem_limit: 512m
+    cpus: 1.0
+    network_mode: none
+    volumes:
+      # Read-only by default: a scanner has no reason to write to the source.
+      - ..:/workspace:ro
+      - aegis-data:/workspace/.aegis
+    command: ["scan", "/workspace", "--format", "sarif", "--output", "/workspace/.aegis/scan.sarif"]
+    working_dir: /workspace
+
+  # Live MCP introspection needs to spawn servers, so it gets its own profile.
+  mcp-scan:
+    build:
+      context: ..
+      dockerfile: infra/sandbox/Dockerfile
+    image: aegis
+    read_only: true
+    cap_drop: [ALL]
+    security_opt: ["no-new-privileges:true"]
+    tmpfs:
+      - /tmp:rw,nosuid,size=128m
+    pids_limit: 512
+    mem_limit: 1g
+    cpus: 2.0
+    # An isolated bridge: servers may bind locally but nothing is reachable
+    # off-host, and no inbound traffic arrives.
+    networks: [isolated]
+    volumes:
+      - ..:/workspace:ro
+    command: ["scan", "/workspace", "--include-processes"]
+    working_dir: /workspace
+
+  # Red teaming an agent: needs egress to the target, nothing else.
+  redteam:
+    build:
+      context: ..
+      dockerfile: infra/sandbox/Dockerfile
+    image: aegis
+    read_only: true
+    cap_drop: [ALL]
+    security_opt: ["no-new-privileges:true"]
+    tmpfs:
+      - /tmp:rw,noexec,nosuid,size=64m
+    pids_limit: 256
+    mem_limit: 1g
+    cpus: 2.0
+    networks: [redteam]
+    environment:
+      OPENAI_API_KEY: ${OPENAI_API_KEY:-}
+      ANTHROPIC_API_KEY: ${ANTHROPIC_API_KEY:-}
+      TARGET_URL: ${TARGET_URL:-}
+    command: ["redteam", "--dry-run"]
+
+networks:
+  # No outbound route and no inbound reachability: MCP servers can start and
+  # bind locally, but nothing is exposed and nothing is fetched.
+  isolated:
+    driver: bridge
+    internal: true
+  # Egress only, to the target under test.
+  redteam:
+    driver: bridge
+
+volumes:
+  aegis-data:

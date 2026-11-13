@@ -1,0 +1,6 @@
+# Rule packs contain the literal attack strings they detect, so scanning them
+# with those same rules reports the vocabulary as if it were an attack.
+#
+# This is the scanner's own reference data, not a target. Point `--rule-dir` at a
+# copy if you need to lint your own rule changes.
+*
